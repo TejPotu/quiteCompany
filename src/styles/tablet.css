@@ -697,6 +697,123 @@
   animation: pulse 2.4s var(--ease) infinite;
 }
 
+/* ---- People screen — dementia-first ---- */
+.people-page { gap: 28px; padding: 28px 48px 32px; }
+
+/* Identity card — the one focal point */
+.person-card {
+  display: grid;
+  grid-template-columns: 320px 1fr;
+  gap: 36px;
+  align-items: center;
+  background: var(--card);
+  border-radius: 36px;
+  padding: 28px;
+  box-shadow: 0 4px 0 rgba(42,36,28,.04), 0 18px 56px rgba(42,36,28,.10);
+  border: 3px solid var(--ember);
+}
+.person-portrait {
+  width: 320px;
+  height: 320px;
+  border-radius: 28px;
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  box-shadow: var(--shadow-1);
+}
+.person-info {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+.person-eyebrow {
+  font-size: 18px;
+  letter-spacing: 0.10em;
+  text-transform: uppercase;
+  color: var(--ink-mute);
+  font-weight: 700;
+  margin-bottom: 4px;
+}
+.person-name {
+  font-family: var(--font-serif);
+  font-size: 96px;
+  font-weight: 500;
+  letter-spacing: -0.02em;
+  line-height: 0.95;
+  color: var(--ink);
+}
+.person-relationship {
+  font-family: var(--font-serif);
+  font-size: 36px;
+  font-weight: 500;
+  color: var(--ember-deep);
+  margin-top: 8px;
+}
+.person-meta {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  margin-top: 16px;
+  font-size: 24px;
+  color: var(--ink-soft);
+  font-weight: 700;
+}
+.person-meta-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+.person-meta-dot {
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: var(--ink-faint, #C9C2B5);
+}
+
+/* Scrollable photos strip */
+.people-photos { display: flex; flex-direction: column; gap: 14px; }
+.people-photos-row {
+  display: flex;
+  gap: 18px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 6px 4px 14px;
+  scroll-snap-type: x mandatory;
+  -webkit-overflow-scrolling: touch;
+}
+.people-photos-row::-webkit-scrollbar { height: 6px; }
+.people-photos-row::-webkit-scrollbar-thumb {
+  background: var(--ink-faint, #C9C2B5);
+  border-radius: 3px;
+}
+.people-photo {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 0;
+  scroll-snap-align: start;
+}
+.people-photo-img {
+  width: 280px;
+  height: 220px;
+  border-radius: 22px;
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  box-shadow: var(--shadow-1);
+  transition: transform 200ms var(--ease);
+}
+.people-photo:hover .people-photo-img { transform: translateY(-2px); }
+.people-photo-caption {
+  font-family: var(--font-serif);
+  font-size: 22px;
+  font-weight: 500;
+  color: var(--ink);
+  text-align: center;
+  letter-spacing: -0.01em;
+}
+
 /* ---- Photo placeholder (the "user's real photo" stand-in) ---- */
 .photo {
   border-radius: 24px;
