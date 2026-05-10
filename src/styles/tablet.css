@@ -361,6 +361,342 @@
 .voice-bar .said { font-family: var(--font-serif); font-size: 28px; color: var(--ink); flex: 1; letter-spacing: -0.01em; }
 .voice-bar .hint { font-size: 18px; color: var(--ink-mute); }
 
+/* ---- Watch (TV) screen — dementia-first ---- */
+.watch-page { gap: 36px; padding: 28px 48px 32px; }
+
+/* Now playing hero — must be the unmistakable focal point */
+.now-playing {
+  display: grid;
+  grid-template-columns: 380px 1fr;
+  gap: 36px;
+  align-items: stretch;
+  background: var(--card);
+  border-radius: 36px;
+  padding: 28px;
+  box-shadow: 0 4px 0 rgba(42,36,28,.04), 0 18px 56px rgba(42,36,28,.12);
+  border: 3px solid var(--ember);
+}
+.now-playing-poster {
+  position: relative;
+  border-radius: 24px;
+  min-height: 320px;
+  display: flex;
+  align-items: flex-end;
+  padding: 24px;
+  color: #FAF6EF;
+  font-family: var(--font-serif);
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  line-height: 1.0;
+  box-shadow: var(--shadow-1);
+  overflow: hidden;
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+}
+.now-playing-poster::after {
+  content: "";
+  position: absolute; inset: 0;
+  background: linear-gradient(180deg, rgba(0,0,0,0) 40%, rgba(0,0,0,0.35) 100%);
+  pointer-events: none;
+}
+.now-playing-poster-title {
+  position: relative;
+  z-index: 1;
+  font-size: 48px;
+  text-shadow: 0 2px 12px rgba(0,0,0,0.35);
+}
+.now-playing-badge {
+  position: absolute;
+  top: 18px;
+  left: 18px;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 18px;
+  border-radius: 999px;
+  background: var(--ember);
+  color: #fff;
+  font-family: var(--font-sans);
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  box-shadow: 0 4px 12px rgba(42,36,28,.25);
+  z-index: 2;
+}
+.now-playing-badge-dot {
+  width: 10px; height: 10px;
+  border-radius: 50%;
+  background: #fff;
+  animation: pulse 2.4s var(--ease) infinite;
+}
+
+.now-playing-info {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 10px;
+}
+.now-playing-label {
+  font-size: 18px;
+  letter-spacing: 0.10em;
+  text-transform: uppercase;
+  color: var(--ink-mute);
+  font-weight: 700;
+}
+.now-playing-title {
+  font-family: var(--font-serif);
+  font-size: 64px;
+  font-weight: 500;
+  letter-spacing: -0.02em;
+  line-height: 1.0;
+  color: var(--ink);
+}
+.now-playing-episode {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 28px;
+  color: var(--ink-soft);
+  font-weight: 700;
+  margin-top: 6px;
+}
+.now-playing-controls {
+  display: flex;
+  align-items: center;
+  gap: 22px;
+  margin-top: 22px;
+}
+.now-playing-controls-hint {
+  font-size: 22px;
+  color: var(--ink-mute);
+  font-weight: 700;
+}
+
+/* Persistent "Captions on" indicator on the hero poster */
+.now-playing-captions {
+  position: absolute;
+  top: 18px;
+  right: 18px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  border-radius: 999px;
+  background: rgba(42, 36, 28, 0.65);
+  backdrop-filter: blur(6px);
+  color: #FAF6EF;
+  font-family: var(--font-sans);
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  z-index: 2;
+}
+
+/* Resume marker — "You're 12 minutes in" */
+.now-playing-resume {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 22px;
+  color: var(--sage-deep);
+  font-weight: 700;
+  margin-top: 4px;
+}
+
+/* Stop watching — plain-language exit */
+.stop-watching {
+  align-self: flex-start;
+  margin-top: 22px;
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px 28px;
+  border-radius: 999px;
+  background: var(--paper-deep);
+  border: 2px solid var(--border);
+  font-family: var(--font-sans);
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--ink);
+  cursor: pointer;
+  transition: background var(--dur-fast) var(--ease), transform 150ms var(--ease);
+}
+.stop-watching:hover { background: var(--card-warm); border-color: var(--ember-soft); }
+.stop-watching:active { transform: scale(0.98); }
+.stop-watching i { color: var(--ink-soft); }
+
+/* Slim confirmation strip shown briefly after "Stop watching" — calm, not alarming */
+.watch-confirmation {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 18px 24px;
+  background: var(--card-warm);
+  border: 1px solid var(--sage-soft, #C9D4BD);
+  border-left: 6px solid var(--sage-deep);
+  border-radius: 20px;
+  animation: confirm-in 280ms var(--ease);
+}
+.watch-confirmation-title {
+  font-family: var(--font-serif);
+  font-size: 26px;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  color: var(--ink);
+  line-height: 1.15;
+}
+.watch-confirmation-sub {
+  font-size: 18px;
+  color: var(--ink-soft);
+  margin-top: 4px;
+}
+@keyframes confirm-in {
+  from { opacity: 0; transform: translateY(-4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* Resume marker on each favourite tile */
+.favourite-resume {
+  position: absolute;
+  bottom: 14px;
+  left: 14px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: rgba(42, 36, 28, 0.6);
+  backdrop-filter: blur(6px);
+  color: #FAF6EF;
+  font-family: var(--font-sans);
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  z-index: 2;
+}
+
+/* Dim non-playing tiles when something IS playing — focus aid */
+.favourites-grid.has-playing .favourite-tile:not(.is-playing) .favourite-poster {
+  opacity: 0.62;
+}
+.favourites-grid.has-playing .favourite-tile:not(.is-playing):hover .favourite-poster {
+  opacity: 1;
+}
+
+/* Reassurance footer — "shows are always here" */
+.watch-reassurance {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  padding: 18px 24px;
+  background: var(--card-warm);
+  border-radius: 24px;
+  border: 1px solid var(--border-soft);
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--ink-soft);
+  align-self: stretch;
+  justify-content: center;
+}
+
+/* Favourites grid */
+.favourites-heading {
+  font-family: var(--font-serif);
+  font-size: 36px;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  color: var(--ink);
+}
+.favourites-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 28px;
+}
+.favourite-tile {
+  all: unset;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  transition: transform 150ms var(--ease);
+}
+.favourite-tile:active { transform: scale(0.985); }
+.favourite-poster {
+  position: relative;
+  border-radius: 28px;
+  height: 240px;
+  box-shadow: var(--shadow-1);
+  overflow: hidden;
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  transition: transform 200ms var(--ease), box-shadow 200ms var(--ease);
+}
+.favourite-tile:hover .favourite-poster {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 28px rgba(42,36,28,.18);
+}
+.favourite-title {
+  font-family: var(--font-serif);
+  font-size: 32px;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  line-height: 1.05;
+  color: var(--ink);
+  text-align: center;
+}
+.favourite-episode {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--ink-mute);
+  text-align: center;
+  margin-top: -4px;
+}
+
+/* Intents row above favourites */
+.watch-intents { display: flex; flex-direction: column; gap: 12px; }
+.watch-intents-label {
+  font-size: 16px;
+  letter-spacing: 0.10em;
+  text-transform: uppercase;
+  color: var(--ink-mute);
+  font-weight: 700;
+}
+.favourite-tile.is-playing .favourite-poster {
+  outline: 4px solid var(--ember);
+  outline-offset: 4px;
+}
+.favourite-tile.is-playing .favourite-title {
+  color: var(--ember-deep);
+}
+.favourite-playing-badge {
+  position: absolute;
+  top: 14px;
+  left: 14px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  border-radius: 999px;
+  background: var(--ember);
+  color: #fff;
+  font-family: var(--font-sans);
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  z-index: 2;
+}
+.favourite-playing-badge-dot {
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  background: #fff;
+  animation: pulse 2.4s var(--ease) infinite;
+}
+
 /* ---- Photo placeholder (the "user's real photo" stand-in) ---- */
 .photo {
   border-radius: 24px;
