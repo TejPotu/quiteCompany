@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(/usr/bin/curl -sS http://localhost:5173/@id/__x00__@phosphor-icons/web/regular -o /dev/null -w \"phosphor regular: %{http_code}\\\\n\")",
+      "Bash(/usr/bin/curl -sS \"http://localhost:5173/node_modules/@phosphor-icons/web/src/regular/style.css\" -o /dev/null -w \"phosphor regular direct: %{http_code}\\\\n\")",
+      "Read(//private/tmp/**)",
+      "Bash(/usr/bin/curl -sS -o /dev/null -w \"main.tsx HTTP %{http_code}\\\\n\" http://localhost:5173/src/main.tsx)"
+    ]
+  }
+}
