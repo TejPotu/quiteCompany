@@ -5,10 +5,9 @@ import SwiftUI
 enum HearthIcon {
     static func sfName(_ phosphor: String) -> String {
         switch phosphor {
-        case "house":                   return "house.fill"
         case "television-simple":       return "tv.fill"
         case "users-three":             return "person.3.fill"
-        case "bell":                    return "bell.fill"
+        case "sparkle":                 return "sparkles"
         case "pill":                    return "pill.fill"
         case "check":                   return "checkmark"
         case "check-circle":            return "checkmark.circle.fill"
@@ -74,25 +73,6 @@ extension PhotoTone {
         case .honey: colors = [HearthColor.honeySoft, HearthColor.honeyDeep]
         }
         return LinearGradient(colors: colors, startPoint: .topLeading, endPoint: .bottomTrailing)
-    }
-}
-
-// Placeholder colored "photo" disc with an initial — used in HomeScreen contact tiles.
-struct Photo: View {
-    let initial: String
-    var tone: PhotoTone = .ember
-    var size: CGFloat = 96
-    var radius: CGFloat = 20
-
-    var body: some View {
-        ZStack {
-            RoundedRectangle(cornerRadius: radius)
-                .fill(tone.gradient)
-            Text(initial)
-                .font(HearthFont.serif(size: size * 0.42))
-                .foregroundStyle(.white)
-        }
-        .frame(width: size, height: size)
     }
 }
 
@@ -304,7 +284,7 @@ struct TopBar: View {
 
 // MARK: - Bottom nav
 enum HearthScreen: String, CaseIterable, Identifiable {
-    case home, tv, people, reminders
+    case tv, people, cues
     var id: String { rawValue }
 }
 
@@ -343,10 +323,9 @@ struct BottomNav: View {
 
     var body: some View {
         HStack(spacing: 12) {
-            NavTab(icon: "house", label: "Home", active: current == .home) { current = .home }
-            NavTab(icon: "television-simple", label: "Watch", active: current == .tv) { current = .tv }
-            NavTab(icon: "users-three", label: "People", active: current == .people) { current = .people }
-            NavTab(icon: "bell", label: "Reminders", active: current == .reminders) { current = .reminders }
+            NavTab(icon: "television-simple", label: "Watch",  active: current == .tv)     { current = .tv }
+            NavTab(icon: "users-three",       label: "People", active: current == .people) { current = .people }
+            NavTab(icon: "sparkle",           label: "Cues",   active: current == .cues)   { current = .cues }
         }
         .padding(.horizontal, 28)
         .padding(.top, 14)

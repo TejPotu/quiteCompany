@@ -11,13 +11,35 @@ import Foundation
 
 enum RokuToolKit {
 
-    /// Catalog text injected into Gemma's prompt. Keep it tight — the model
-    /// only needs enough to plan, not exhaustive docs.
-    static func catalog(showTitles: [String]) -> String {
+    /// Catalog text injected into Gemma's prompt. Cues come FIRST (knowledge
+    /// before actions), then TOOLS, then OUTPUT shape, then examples that
+    /// teach fuzzy matching + reasoned prose (not verbatim recitation).
+    static func catalog(showTitles: [String], cues: [CueSpec] = []) -> String {
         let titles = showTitles.joined(separator: ", ")
-        return """
-        Tools you can use. One tool per line, with arguments separated by
-        spaces. Numbers in brackets are optional repeat counts (default 1).
+        var out = ""
+
+        if !cues.isEmpty {
+            out += "CUES — caregiver-authored knowledge about THIS person. These are\n"
+            out += "your highest priority — most questions are answered from these, not\n"
+            out += "from TV tools. The Hears phrases are just hints; match meaning, not\n"
+            out += "exact words. Reason naturally from Content + Schedule + Threshold +\n"
+            out += "the current time/weather. Speak in plain prose; do NOT recite the\n"
+            out += "Content verbatim if it would sound robotic or contradict the moment.\n\n"
+            for cue in cues {
+                let kw = cue.keywords.map { "\u{201C}\($0)\u{201D}" }.joined(separator: ", ")
+                out += "- \(cue.name)\n"
+                out += "  Hears (examples — match meaning, not wording): \(kw)\n"
+                out += "  Content: \(cue.value)\n"
+                if let s = cue.schedule, !s.isEmpty { out += "  Schedule: \(s)\n" }
+                if let t = cue.threshold, !t.isEmpty { out += "  Threshold: \(t)\n" }
+            }
+            out += "\n"
+        }
+
+        out += """
+        TOOLS — TV control. One per line, args space-separated. Numbers in
+        brackets are repeat counts (default 1). Use these ONLY for clear TV
+        intent (pause, louder, put on a show, etc.).
 
         - play                — toggle play/pause
         - volumeUp [n]        — louder, n times
@@ -33,12 +55,28 @@ enum RokuToolKit {
                                 Back, Info, Search, VolumeMute, ChannelUp,
                                 ChannelDown, PowerOff, InstantReplay, Rev, Fwd
 
-        After tool calls, ALWAYS end with one final line:
-        say <one warm sentence to the user about what just happened>
+        OUTPUT — reply as exactly one of:
+        A) Cue answer (no tool call):
+             say <warm sentence weaving cue facts with right-now context>
+        B) TV action (one or more tool lines) ending with a say-line:
+             <tool> [args]
+             say <one short sentence about what just happened>
+        C) Genuinely unsure:
+             say <one short follow-up question — never echo their words>
 
-        If no tool fits, output only a single `say <...>` line.
+        STRICT RULES:
+        - NEVER echo the user's question back as your say-line.
+        - NEVER say "I'm here to help with the TV" or similar refusals.
+          Cues are first-class — answer from them.
+        - NEVER invent facts beyond Content/Schedule/Threshold + Right-Now.
+        - If you can hear ANY topic word that maps to a cue (weather, cold,
+          hot, jacket, medicine, pills, meds, tablets, news, show, time…),
+          you MUST answer from that cue. Do NOT fall back to "I didn't catch
+          that" — that response is ONLY for true silence or fully unparseable
+          audio.
+        - No preamble, no markdown, no labels. Just the lines.
 
-        Examples:
+        EXAMPLES — study how cue facts get REASONED about, not recited.
 
         > pause this
         play
@@ -48,22 +86,43 @@ enum RokuToolKit {
         volumeDown 4
         say Quieter now.
 
-        > I missed that last bit
-        rewind 3
-        say I went back about thirty seconds.
-
         > put on Young Sheldon
         launchShow Young Sheldon
         say Putting on Young Sheldon.
 
-        > what's happening
-        say You're 4 minutes into Young Sheldon's pilot, about 18 minutes left.
-
-        > pause it and turn the volume down two
-        play
-        volumeDown 2
-        say Paused and a little quieter.
         """
+
+        if let med = cues.first(where: { $0.name.lowercased().contains("medic") || $0.name.lowercased().contains("pill") }) {
+            _ = med
+            out += "// [Medicine cue, Right now is late at night]\n"
+            out += "> is it time for my medicine\n"
+            out += "say Not yet — that's tomorrow morning around nine. Plenty of time to rest.\n\n"
+            out += "// [Medicine cue, Right now around 9 AM]\n"
+            out += "> did I take my pills\n"
+            out += "say They're due right about now. The organizer is on the desk by the TV — the red one from the morning slot.\n\n"
+        }
+
+        if let weather = cues.first(where: { $0.name.lowercased().contains("weather") }) {
+            _ = weather
+            out += "// [Weather cue, outside is 45°F]\n"
+            out += "> is it cold\n"
+            out += "say A little chilly out — in the forties. A jacket would help if you head out.\n\n"
+            out += "// [Weather cue, outside is 72°F]\n"
+            out += "> how's the weather\n"
+            out += "say It feels mild today — about seventy-two and comfortable. No jacket needed.\n"
+        }
+
+        return out
+    }
+
+    // Lightweight value type used to inject cues into the prompt without
+    // dragging UI-bound CueEntry into the service layer.
+    struct CueSpec: Equatable {
+        let name: String
+        let keywords: [String]
+        let value: String
+        var schedule: String? = nil
+        var threshold: String? = nil
     }
 
     struct Plan: Equatable {
@@ -78,34 +137,50 @@ enum RokuToolKit {
         let args: String   // remainder of the line; tool-specific parsing
     }
 
-    /// Parses Gemma's raw response. Ignores preamble, blank lines, and lines
-    /// that don't start with a known prefix.
+    /// Parses Gemma's raw response. Permissive: any non-tool, non-comment
+    /// line becomes part of the narration even without a `say` prefix —
+    /// otherwise Gemma's natural prose answers (which often drop the prefix)
+    /// would be discarded and the UI would fall back to "didn't catch that."
     static func parse(_ raw: String) -> Plan {
         var calls: [ToolCall] = []
-        var narration: String? = nil
+        var saySegments: [String] = []
+        var orphan: [String] = []
+
         for rawLine in raw.split(whereSeparator: \.isNewline) {
             let line = String(rawLine)
                 .trimmingCharacters(in: .whitespacesAndNewlines)
-                .trimmingCharacters(in: CharacterSet(charactersIn: "-*•"))
+                .trimmingCharacters(in: CharacterSet(charactersIn: "-*•>"))
                 .trimmingCharacters(in: .whitespaces)
             if line.isEmpty { continue }
+            // Drop comment lines that may leak from examples (e.g. "// [Weather cue, ...]").
+            if line.hasPrefix("//") || line.hasPrefix("#") { continue }
 
-            // SAY narration line.
+            // Explicit SAY narration line.
             if let stripped = line.dropPrefix(caseInsensitive: "say ") {
-                narration = stripped.trimmingCharacters(in: .whitespaces)
+                saySegments.append(stripped.trimmingCharacters(in: .whitespaces))
                 continue
             }
 
-            // Tool call.
+            // Possible tool call.
             let parts = line.split(separator: " ", maxSplits: 1, omittingEmptySubsequences: true)
             guard let head = parts.first else { continue }
             let name = String(head).lowercased()
             let args = parts.count > 1
                 ? String(parts[1]).trimmingCharacters(in: .whitespaces)
                 : ""
-            // Filter obvious junk (preamble like "I'll", "Sure," etc.).
-            guard knownTools.contains(name) else { continue }
-            calls.append(ToolCall(name: name, args: args))
+            if knownTools.contains(name) {
+                calls.append(ToolCall(name: name, args: args))
+            } else {
+                // Not a tool — treat as narration prose Gemma forgot to prefix.
+                orphan.append(line)
+            }
+        }
+
+        var narration: String? = saySegments.isEmpty
+            ? nil
+            : saySegments.joined(separator: " ")
+        if narration == nil, !orphan.isEmpty {
+            narration = orphan.joined(separator: " ")
         }
         return Plan(calls: calls, narration: narration)
     }

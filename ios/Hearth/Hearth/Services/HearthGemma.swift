@@ -3,9 +3,6 @@ import SwiftUI
 import Observation
 import LiteRTLMSwift
 
-// First Gemma surface: writes the orienting line on HomeScreen, grounded in
-// real app state (time, day, next reminder). Falls back to nil if the engine
-// isn't ready — callers keep their existing hardcoded line in that case.
 @Observable
 @MainActor
 final class HearthGemma {
@@ -19,7 +16,6 @@ final class HearthGemma {
     }
 
     var status: Status = .idle
-    private(set) var lastHomeLine: String?
 
     let downloader = ModelDownloader()
     private var engine: LiteRTLMEngine?
@@ -95,9 +91,10 @@ final class HearthGemma {
 
     // MARK: Generation
 
-    // Snapshot of the current TV state passed to Gemma so it can plan in one
-    // shot ("they said 'next' and we're 99% in — that's the Up Next overlay
-    // moment"). All fields are optional; pass what you have.
+    // Snapshot of the current world passed to Gemma so it can plan in one
+    // shot. Time fields matter for cue answers that mention a schedule
+    // ("Take meds at 9 AM" — at 11 PM, Gemma should say "in the morning,
+    // about 9 hours away," not recite the script blindly).
     struct VoiceWorldState {
         let rokuStatus: String          // "ready", "unreachable", "unconfigured"
         let activeShowTitle: String?    // what Hearth last launched
@@ -105,17 +102,21 @@ final class HearthGemma {
         let playbackState: String?      // "playing"/"paused"/"stopped"/"idle"
         let positionSeconds: Int?
         let durationSeconds: Int?
+        let clock: String?              // "11:58 PM"
+        let dayOfWeek: String?          // "Wednesday"
+        let weatherTemperature: String? // "72°F" — for Weather cue grounding
     }
 
     // Plans a voice action with Gemma's audio model + the RokuToolKit catalog.
     // Single-shot tool calling: the model sees the user's audio, the current
-    // world state, and the tool catalog, then emits one tool call per line
-    // followed by a `say` line for narration. Returns the parsed Plan, or an
-    // empty Plan if Gemma is busy or errors out.
+    // world state, the Roku tool catalog, and the caregiver-authored cue
+    // catalog, then emits one tool call per line followed by a `say` line.
+    // Returns the parsed Plan, or an empty Plan if Gemma is busy or errors out.
     func planVoiceAction(
         audioData: Data,
         state: VoiceWorldState,
-        showTitles: [String]
+        showTitles: [String],
+        cues: [RokuToolKit.CueSpec] = []
     ) async -> RokuToolKit.Plan {
         guard case .ready = status, let engine, !generating else {
             return RokuToolKit.Plan(calls: [], narration: nil)
@@ -123,22 +124,22 @@ final class HearthGemma {
         generating = true
         defer { generating = false }
 
-        let catalog = RokuToolKit.catalog(showTitles: showTitles)
+        let catalog = RokuToolKit.catalog(showTitles: showTitles, cues: cues)
         let stateBlock = formatState(state)
         let prompt = """
-        You are the voice agent inside Hearth, an iPad app helping someone with
-        mild memory difficulty control their TV. The user just spoke. Decide
-        which Roku tools to call and what to say back. Be warm and gentle.
+        You are Hearth's voice companion on the iPad. You help this person, who
+        has mild memory difficulty, in two ways:
+          1) ANSWER questions using the CUES — caregiver-authored facts about
+             this specific person. This is your primary job.
+          2) ACT on TV requests using the TOOLS.
 
-        CURRENT STATE
+        Speak warmly, briefly, as if mid-conversation. Never frame yourself as
+        a TV-only helper — cues are first-class.
+
+        RIGHT NOW
         \(stateBlock)
 
-        TOOLS
         \(catalog)
-
-        Reply ONLY with tool calls (one per line) followed by a single `say`
-        line. No preamble, no markdown, no explanations. If you're not sure
-        what they meant, reply only with a `say` line asking them to try again.
         """
 
         do {
@@ -161,6 +162,13 @@ final class HearthGemma {
 
     private func formatState(_ s: VoiceWorldState) -> String {
         var lines: [String] = []
+        if let clock = s.clock {
+            let dow = s.dayOfWeek.map { ", \($0)" } ?? ""
+            lines.append("- Time: \(clock)\(dow)")
+        }
+        if let temp = s.weatherTemperature {
+            lines.append("- Weather outside: \(temp)")
+        }
         lines.append("- TV connection: \(s.rokuStatus)")
         if let title = s.activeShowTitle {
             lines.append("- Currently active show in Hearth: \(title)")
@@ -175,7 +183,6 @@ final class HearthGemma {
             let percent = p * 100 / d
             lines.append("- Position: \(Self.clock(p)) of \(Self.clock(d)) (\(percent)%)")
         }
-        if lines.count == 1 { lines.append("- (no further playback info)") }
         return lines.joined(separator: "\n")
     }
 
@@ -252,54 +259,6 @@ final class HearthGemma {
         if m == 0 { return "\(s) seconds" }
         if s == 0 { return m == 1 ? "1 minute" : "\(m) minutes" }
         return "\(m) min \(s) sec"
-    }
-
-    struct HomeContext {
-        let timeOfDay: String       // "morning", "afternoon", "evening", "night"
-        let dayOfWeek: String       // "Tuesday"
-        let clock: String           // "8:42 AM"
-        let nextReminder: String?   // "Medicine at 9:00 AM, about 18 minutes away"
-    }
-
-    func generateHomeLine(_ ctx: HomeContext) async {
-        guard case .ready = status, let engine, !generating else { return }
-        generating = true
-        defer { generating = false }
-
-        let next = ctx.nextReminder ?? "no specific reminder coming up"
-        let user = """
-        Write ONE warm, calm sentence (max 22 words) that orients an older
-        viewer with mild memory difficulty. Be specific and gentle. No greetings
-        like "Hello" — speak as if continuing a quiet conversation. Never invent
-        events. Never blame. Use only these facts:
-
-        - Time of day: \(ctx.timeOfDay)
-        - Day: \(ctx.dayOfWeek)
-        - Clock: \(ctx.clock)
-        - Next thing: \(next)
-
-        Reply with just the sentence, no quotes, no preamble.
-        """
-
-        let prompt = "<|turn>user\n\(user)\n<turn|>\n<|turn>model\n"
-
-        do {
-            if !sessionOpen {
-                try await engine.openSession(temperature: 0.7, maxTokens: 96)
-                sessionOpen = true
-            }
-            var out = ""
-            for try await chunk in engine.sessionGenerateStreaming(input: prompt) {
-                out += chunk
-            }
-            // Reset for the next single-shot turn so prompts don't compound.
-            engine.closeSession()
-            sessionOpen = false
-            let cleaned = clean(out)
-            if !cleaned.isEmpty { lastHomeLine = cleaned }
-        } catch {
-            status = .error(error.localizedDescription)
-        }
     }
 
     private func clean(_ raw: String) -> String {

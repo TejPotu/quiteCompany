@@ -2,8 +2,8 @@ import SwiftUI
 import LiteRTLMSwift
 
 // Onboarding sheet for the on-device companion. Triggered from a discreet
-// button on HomeScreen (developer-facing — the user enables once on the dad's
-// iPad and then it never reappears).
+// button on the Cues tab (developer-facing — enabled once on the dad's iPad
+// and then it never reappears).
 struct GemmaSetupSheet: View {
     @Environment(HearthGemma.self) private var gemma
     @Environment(\.dismiss) private var dismiss

@@ -3,6 +3,7 @@ import SwiftUI
 struct TVScreen: View {
     @Environment(RokuController.self) private var roku
     @Environment(HearthGemma.self) private var gemma
+    @Environment(CueStore.self) private var cues
     @State private var paused = false
     @State private var stopped = false
     @State private var playing: Show = FavouritesData.all[0]
@@ -559,25 +560,39 @@ struct TVScreen: View {
 
         // Snapshot the world so Gemma can plan in one shot.
         let titles = FavouritesData.all.map(\.title)
+        let now = Date()
         let state = HearthGemma.VoiceWorldState(
             rokuStatus: rokuStatusString(),
             activeShowTitle: playing.title,
             activeEpisode: playing.episode,
             playbackState: mediaState.map { stateLabel($0.status) },
             positionSeconds: mediaState?.positionSeconds,
-            durationSeconds: mediaState?.durationSeconds
+            durationSeconds: mediaState?.durationSeconds,
+            clock: Self.fmtTimeOfDay(now),
+            dayOfWeek: Self.fmtDayOfWeek(now),
+            weatherTemperature: "72°F"
         )
 
+        let cueSpecs = cues.entries.map {
+            RokuToolKit.CueSpec(
+                name: $0.name,
+                keywords: $0.keywords,
+                value: $0.value,
+                schedule: $0.schedule,
+                threshold: $0.threshold
+            )
+        }
         let plan = await gemma.planVoiceAction(
-            audioData: data, state: state, showTitles: titles
+            audioData: data, state: state, showTitles: titles, cues: cueSpecs
         )
         voiceState = .idle
         await executePlan(plan)
     }
 
-    // Run each tool call in order via RokuToolExecutor, then narrate. If the
-    // model returned no calls and no narration, fall back to a gentle retry
-    // prompt so the user always hears something back.
+    // Orchestrator path. Runs each tool call in order, then narrates. Special
+    // case: when Gemma emits `answerCue <name>`, we substitute the caregiver's
+    // verbatim cue value for the narration — never let the model paraphrase a
+    // medical/care answer.
     private func executePlan(_ plan: RokuToolKit.Plan) async {
         let executor = RokuToolExecutor(roku: roku, shows: FavouritesData.all)
         for call in plan.calls {
@@ -707,6 +722,18 @@ struct TVScreen: View {
         case .stopped:   return "Stopped"
         case .idle:      return "Nothing is playing right now"
         }
+    }
+
+    private static func fmtTimeOfDay(_ date: Date) -> String {
+        let f = DateFormatter()
+        f.dateFormat = "h:mm a"
+        return f.string(from: date)
+    }
+
+    private static func fmtDayOfWeek(_ date: Date) -> String {
+        let f = DateFormatter()
+        f.dateFormat = "EEEE"
+        return f.string(from: date)
     }
 
     private static func fmtClock(_ seconds: Int) -> String {

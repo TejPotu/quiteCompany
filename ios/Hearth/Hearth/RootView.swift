@@ -7,22 +7,14 @@ struct RootView: View {
            let s = HearthScreen(rawValue: args[idx + 1]) {
             return s
         }
-        return .home
+        return .tv
     }()
 
     private func greeting(at date: Date) -> String {
         switch screen {
-        case .home:
-            let hour = Calendar.current.component(.hour, from: date)
-            switch hour {
-            case 5..<12:  return "Good morning"
-            case 12..<17: return "Good afternoon"
-            case 17..<22: return "Good evening"
-            default:      return "Hello"
-            }
-        case .tv:        return "Watching"
-        case .people:    return "Looking"
-        case .reminders: return "Today"
+        case .tv:     return "Watching"
+        case .people: return "Looking"
+        case .cues:   return "Setup"
         }
     }
 
@@ -42,10 +34,9 @@ struct RootView: View {
                 }
                 Group {
                     switch screen {
-                    case .home:      HomeScreen(goTo: { screen = $0 })
-                    case .tv:        TVScreen()
-                    case .people:    PersonScreen()
-                    case .reminders: RemindersScreen()
+                    case .tv:     TVScreen()
+                    case .people: PersonScreen()
+                    case .cues:   CuesScreen()
                     }
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
