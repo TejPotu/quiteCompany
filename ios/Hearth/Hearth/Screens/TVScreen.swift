@@ -1,9 +1,12 @@
 import SwiftUI
+import Combine
 
 struct TVScreen: View {
     @Environment(RokuController.self) private var roku
     @Environment(HearthGemma.self) private var gemma
     @Environment(CueStore.self) private var cues
+    @Environment(PresenceMonitor.self) private var presence
+    @State private var showingWellness = false
     @State private var paused = false
     @State private var stopped = false
     @State private var playing: Show = FavouritesData.all[0]
@@ -28,6 +31,12 @@ struct TVScreen: View {
     var body: some View {
         Page(spacing: 24, horizontalPadding: 48, topPadding: 24) {
             ContextStrip(says: says, heard: heard)
+
+            TimelineView(.periodic(from: .now, by: 15)) { _ in
+                if presence.alertActive {
+                    presenceAlertBanner
+                }
+            }
 
             if !stopped {
                 nowPlayingHero
@@ -63,9 +72,22 @@ struct TVScreen: View {
             .frame(maxWidth: .infinity)
             .background(RoundedRectangle(cornerRadius: 24).fill(HearthColor.cardWarm))
             .overlay(RoundedRectangle(cornerRadius: 24).stroke(HearthColor.borderSoft, lineWidth: 1))
+
+            TimelineView(.periodic(from: .now, by: 15)) { _ in
+                wellnessPill
+            }
         }
         .sheet(isPresented: $showingRokuSetup) {
             RokuSetupSheet().environment(roku)
+        }
+        .sheet(isPresented: $showingWellness) {
+            WellnessSheet(
+                presence: presence,
+                onDismiss: { showingWellness = false }
+            )
+        }
+        .task {
+            presence.attach(gemma: gemma)
         }
         .task {
             // Poll Roku state while screen is visible. Cancels on disappear.
@@ -793,6 +815,94 @@ struct TVScreen: View {
         case .stopped, .idle: return "stopped"
         }
     }
+
+    // MARK: - Wellness (presence monitor surface)
+
+    // Compact pill at the bottom of the page. Three states:
+    //   off    — gentle invitation to enable monitoring
+    //   on/ok  — green dot, "Watching · last seen 12m ago"
+    //   alert  — ember/red, "Not seen for 2h 14m"
+    private var wellnessPill: some View {
+        HStack {
+            Spacer()
+            Button { showingWellness = true } label: {
+                HStack(spacing: 12) {
+                    Circle().fill(wellnessDotColor).frame(width: 10, height: 10)
+                    Text(wellnessLabel)
+                        .font(HearthFont.sans(size: 16, weight: .bold))
+                        .foregroundStyle(HearthColor.ink)
+                    Icon(name: "pencil", size: 13, color: HearthColor.inkMute)
+                }
+                .padding(.horizontal, 20)
+                .padding(.vertical, 12)
+                .background(Capsule().fill(HearthColor.card))
+                .overlay(Capsule().stroke(HearthColor.borderSoft, lineWidth: 1))
+                .shadow(color: .black.opacity(0.05), radius: 8, x: 0, y: 2)
+            }
+            .buttonStyle(.plain)
+            Spacer()
+        }
+        .padding(.top, 12)
+    }
+
+    private var wellnessDotColor: Color {
+        if !presence.isMonitoring { return HearthColor.inkMute }
+        if presence.alertActive { return .red }
+        if presence.lastSeen != nil { return HearthColor.sageDeep }
+        return HearthColor.ember
+    }
+
+    private var wellnessLabel: String {
+        if !presence.isMonitoring { return "Wellness sensing off" }
+        if presence.alertActive {
+            return "Not seen for \(Self.fmtElapsed(presence.secondsSinceLastSeen ?? 0))"
+        }
+        if let secs = presence.secondsSinceLastSeen {
+            if secs < 60 { return "Watching · just now" }
+            return "Watching · last seen \(Self.fmtElapsed(secs)) ago"
+        }
+        return "Watching · waiting for a sample"
+    }
+
+    // Big banner at the top of the page when the absence threshold has
+    // tripped. Persistent (no auto-dismiss) — meant to be impossible to
+    // miss when the caregiver walks past the iPad.
+    private var presenceAlertBanner: some View {
+        Button { showingWellness = true } label: {
+            HStack(alignment: .center, spacing: 18) {
+                ZStack {
+                    Circle().fill(Color.red.opacity(0.15)).frame(width: 56, height: 56)
+                    Icon(name: "x-circle", size: 32, color: .red)
+                }
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("NOBODY SEEN IN THE ROOM")
+                        .font(HearthFont.sans(size: 13, weight: .bold))
+                        .tracking(1.6)
+                        .foregroundStyle(.red)
+                    Text("Hearth hasn't spotted anyone for \(Self.fmtElapsed(presence.secondsSinceLastSeen ?? 0)).")
+                        .font(HearthFont.serif(size: 24, weight: .medium))
+                        .foregroundStyle(HearthColor.ink)
+                }
+                Spacer(minLength: 0)
+                Icon(name: "pencil", size: 18, color: HearthColor.inkMute)
+            }
+            .padding(20)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(RoundedRectangle(cornerRadius: 24).fill(Color.red.opacity(0.06)))
+            .overlay(RoundedRectangle(cornerRadius: 24).stroke(Color.red.opacity(0.5), lineWidth: 2))
+        }
+        .buttonStyle(.plain)
+    }
+
+    private static func fmtElapsed(_ seconds: TimeInterval) -> String {
+        let s = Int(seconds)
+        if s < 60 { return "\(s)s" }
+        let m = s / 60
+        if m < 60 { return "\(m)m" }
+        let h = m / 60
+        let mr = m % 60
+        return mr == 0 ? "\(h)h" : "\(h)h \(mr)m"
+    }
 }
 
 // Simple flowing-wrap HStack so the intent chips wrap on narrow widths.
@@ -806,5 +916,276 @@ struct FlowingHStack<Content: View>: View {
         // a plain HStack is fine on iPad widths where 4 chips fit; if needed we
         // can swap to a proper Flow layout later.
         HStack(spacing: spacing) { content() }
+    }
+}
+
+// MARK: - Wellness sheet
+//
+// Caregiver-facing controls for the presence sensing loop. Toggle the
+// loop on/off, pick how often Hearth checks the room, pick how long
+// "missing" needs to be before it counts as an alert, and scrub through
+// recent samples.
+struct WellnessSheet: View {
+    let presence: PresenceMonitor
+    let onDismiss: () -> Void
+
+    @State private var ticker = Date()
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 24) {
+                header
+                statusCard
+                controlsCard
+                samplesCard
+            }
+            .padding(28)
+        }
+        .background(HearthColor.paper.ignoresSafeArea())
+        .onReceive(Timer.publish(every: 1, on: .main, in: .common).autoconnect()) { _ in
+            ticker = Date()
+        }
+    }
+
+    private var header: some View {
+        HStack(alignment: .center, spacing: 14) {
+            ZStack {
+                Circle().fill(HearthColor.ember.opacity(0.12)).frame(width: 56, height: 56)
+                Icon(name: "heart", size: 28, color: HearthColor.ember)
+            }
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Wellness sensing")
+                    .font(HearthFont.serif(size: 30, weight: .medium))
+                    .foregroundStyle(HearthColor.ink)
+                Text("Hearth quietly checks the room and alerts you if no one's been seen in a while.")
+                    .font(HearthFont.sans(size: 15))
+                    .foregroundStyle(HearthColor.inkSoft)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            Spacer()
+            Button(action: onDismiss) {
+                Icon(name: "x-circle", size: 28, color: HearthColor.inkMute)
+            }
+            .buttonStyle(.plain)
+        }
+    }
+
+    private var statusCard: some View {
+        let lastSeenText: String = {
+            guard let last = presence.lastSeen else { return "Never" }
+            return "\(Self.fmtElapsed(ticker.timeIntervalSince(last))) ago"
+        }()
+        let lastSampleText: String = {
+            guard let when = presence.lastSampleAt else { return "Not yet" }
+            return "\(Self.fmtElapsed(ticker.timeIntervalSince(when))) ago · \(presence.lastSampleResult.label)"
+        }()
+
+        return VStack(alignment: .leading, spacing: 16) {
+            HStack(spacing: 12) {
+                Circle().fill(headerDot).frame(width: 14, height: 14)
+                Text(headerTitle.uppercased())
+                    .font(HearthFont.sans(size: 13, weight: .bold))
+                    .tracking(1.6)
+                    .foregroundStyle(headerColor)
+            }
+            HStack(spacing: 24) {
+                statBlock(label: "LAST SEEN", value: lastSeenText)
+                statBlock(label: "LAST SAMPLE", value: lastSampleText)
+                statBlock(label: "SAMPLES", value: "\(presence.samples.count)")
+            }
+            if presence.cameraDenied {
+                Text("Camera permission was denied. Wellness sensing can't run.")
+                    .font(HearthFont.sans(size: 14))
+                    .foregroundStyle(.red)
+            }
+        }
+        .padding(22)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: 24).fill(HearthColor.card))
+        .overlay(RoundedRectangle(cornerRadius: 24).stroke(headerColor.opacity(0.4), lineWidth: 2))
+    }
+
+    private var headerDot: Color {
+        if !presence.isMonitoring { return HearthColor.inkMute }
+        if presence.alertActive { return .red }
+        return HearthColor.sageDeep
+    }
+    private var headerColor: Color {
+        if !presence.isMonitoring { return HearthColor.inkMute }
+        if presence.alertActive { return .red }
+        return HearthColor.sageDeep
+    }
+    private var headerTitle: String {
+        if !presence.isMonitoring { return "Sensing is off" }
+        if presence.alertActive { return "Alert · nobody seen recently" }
+        return "All good · room is occupied"
+    }
+
+    private func statBlock(label: String, value: String) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(label)
+                .font(HearthFont.sans(size: 11, weight: .bold))
+                .tracking(1.4)
+                .foregroundStyle(HearthColor.inkMute)
+            Text(value)
+                .font(HearthFont.serif(size: 20, weight: .medium))
+                .foregroundStyle(HearthColor.ink)
+        }
+    }
+
+    private var controlsCard: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            Toggle(isOn: Binding(
+                get: { presence.isMonitoring },
+                set: { on in on ? presence.start() : presence.stop() }
+            )) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Watch the room")
+                        .font(HearthFont.sans(size: 18, weight: .bold))
+                        .foregroundStyle(HearthColor.ink)
+                    Text("The camera blinks for about a second per sample.")
+                        .font(HearthFont.sans(size: 14))
+                        .foregroundStyle(HearthColor.inkSoft)
+                }
+            }
+            .tint(HearthColor.ember)
+
+            Divider().background(HearthColor.borderSoft)
+
+            VStack(alignment: .leading, spacing: 10) {
+                Text("CHECK EVERY")
+                    .font(HearthFont.sans(size: 12, weight: .bold))
+                    .tracking(1.4)
+                    .foregroundStyle(HearthColor.inkMute)
+                HStack(spacing: 10) {
+                    intervalChip(label: "30s", seconds: 30)
+                    intervalChip(label: "1m", seconds: 60)
+                    intervalChip(label: "5m", seconds: 300)
+                    intervalChip(label: "15m", seconds: 900)
+                }
+            }
+
+            VStack(alignment: .leading, spacing: 10) {
+                Text("ALERT AFTER")
+                    .font(HearthFont.sans(size: 12, weight: .bold))
+                    .tracking(1.4)
+                    .foregroundStyle(HearthColor.inkMute)
+                HStack(spacing: 10) {
+                    thresholdChip(label: "2m", seconds: 120)
+                    thresholdChip(label: "5m", seconds: 300)
+                    thresholdChip(label: "30m", seconds: 30 * 60)
+                    thresholdChip(label: "1h", seconds: 60 * 60)
+                    thresholdChip(label: "2h", seconds: 2 * 60 * 60)
+                }
+            }
+
+            HStack {
+                Spacer()
+                HearthButton("Check now", kind: .secondary, icon: "camera") {
+                    Task { await presence.sampleNow() }
+                }
+                .opacity(presence.sampling ? 0.5 : 1)
+                .disabled(presence.sampling)
+            }
+        }
+        .padding(22)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: 24).fill(HearthColor.card))
+        .overlay(RoundedRectangle(cornerRadius: 24).stroke(HearthColor.borderSoft, lineWidth: 1))
+    }
+
+    private func intervalChip(label: String, seconds: TimeInterval) -> some View {
+        let active = Int(presence.sampleInterval) == Int(seconds)
+        return Button {
+            presence.setSampleInterval(seconds)
+        } label: {
+            Text(label)
+                .font(HearthFont.sans(size: 15, weight: .bold))
+                .foregroundStyle(active ? .white : HearthColor.ink)
+                .padding(.horizontal, 18)
+                .padding(.vertical, 10)
+                .background(Capsule().fill(active ? HearthColor.ember : HearthColor.cardWarm))
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func thresholdChip(label: String, seconds: TimeInterval) -> some View {
+        let active = Int(presence.absenceThreshold) == Int(seconds)
+        return Button {
+            presence.setAbsenceThreshold(seconds)
+        } label: {
+            Text(label)
+                .font(HearthFont.sans(size: 15, weight: .bold))
+                .foregroundStyle(active ? .white : HearthColor.ink)
+                .padding(.horizontal, 18)
+                .padding(.vertical, 10)
+                .background(Capsule().fill(active ? HearthColor.ember : HearthColor.cardWarm))
+        }
+        .buttonStyle(.plain)
+    }
+
+    private var samplesCard: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Text("RECENT SAMPLES")
+                .font(HearthFont.sans(size: 13, weight: .bold))
+                .tracking(1.6)
+                .foregroundStyle(HearthColor.inkMute)
+            if presence.samples.isEmpty {
+                Text("Hearth hasn't taken any samples yet.")
+                    .font(HearthFont.sans(size: 15))
+                    .foregroundStyle(HearthColor.inkSoft)
+                    .padding(.vertical, 8)
+            } else {
+                VStack(alignment: .leading, spacing: 8) {
+                    ForEach(presence.samples.suffix(12).reversed()) { sample in
+                        HStack(spacing: 12) {
+                            Icon(
+                                name: sample.present ? "check-circle" : "x-circle",
+                                size: 18,
+                                color: sample.present ? HearthColor.sageDeep : HearthColor.inkMute
+                            )
+                            Text(Self.fmtTime(sample.timestamp))
+                                .font(HearthFont.sans(size: 15, weight: .bold).monospacedDigit())
+                                .foregroundStyle(HearthColor.ink)
+                            Text(sample.present ? "Person in the room" : "No one visible")
+                                .font(HearthFont.sans(size: 15))
+                                .foregroundStyle(HearthColor.inkSoft)
+                            Spacer()
+                        }
+                    }
+                }
+            }
+        }
+        .padding(22)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: 24).fill(HearthColor.card))
+        .overlay(RoundedRectangle(cornerRadius: 24).stroke(HearthColor.borderSoft, lineWidth: 1))
+    }
+
+    private static func fmtElapsed(_ seconds: TimeInterval) -> String {
+        let s = Int(seconds)
+        if s < 60 { return "\(s)s" }
+        let m = s / 60
+        if m < 60 { return "\(m)m" }
+        let h = m / 60
+        let mr = m % 60
+        return mr == 0 ? "\(h)h" : "\(h)h \(mr)m"
+    }
+
+    private static func fmtTime(_ d: Date) -> String {
+        let f = DateFormatter()
+        f.dateFormat = "h:mm:ss a"
+        return f.string(from: d)
+    }
+}
+
+private extension PresenceMonitor.SampleResult {
+    var label: String {
+        switch self {
+        case .unknown:           return "not yet"
+        case .present:           return "person seen"
+        case .absent:            return "no one visible"
+        case .skipped(let why):  return "skipped (\(why))"
+        }
     }
 }

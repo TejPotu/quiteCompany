@@ -6,6 +6,7 @@ struct HearthApp: App {
     @State private var roku = RokuController()
     @State private var cues = CueStore()
     @State private var people = PeopleStore()
+    @State private var presence = PresenceMonitor()
 
     var body: some Scene {
         WindowGroup {
@@ -14,6 +15,7 @@ struct HearthApp: App {
                 .environment(roku)
                 .environment(cues)
                 .environment(people)
+                .environment(presence)
                 .task { await gemma.prepareIfNeeded() }
         }
     }

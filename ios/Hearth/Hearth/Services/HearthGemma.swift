@@ -321,6 +321,49 @@ final class HearthGemma {
         }
     }
 
+    // MARK: - Vision (presence sensing)
+
+    // Yes/no: is a person visible in this frame? Powers the Watch tab's
+    // presence-sensing loop. Cheaper prompt than the pairwise verifier
+    // because we only need a single bit out — Gemma can spend its tokens
+    // on confidence, not reasoning.
+    func detectPresence(imageData: Data) async -> Bool? {
+        guard case .ready = status, let engine, !generating else { return nil }
+        generating = true
+        defer { generating = false }
+
+        let prompt = """
+        Look at this photograph of a room.
+
+        Is there a human person visible anywhere in the frame? Even partially
+        — an arm, a leg, a person in the background — counts as yes. Ignore
+        people on TV screens, in photographs on walls, or in posters.
+
+        Reply with ONLY one word: yes or no. No punctuation.
+        """
+
+        do {
+            if sessionOpen { engine.closeSession(); sessionOpen = false }
+            let raw = try await engine.vision(
+                imageData: imageData,
+                prompt: prompt,
+                temperature: 0.1,
+                maxTokens: 8
+            )
+            try? await openSession()
+            let first = clean(raw)
+                .lowercased()
+                .split(whereSeparator: { !$0.isLetter })
+                .first
+                .map(String.init) ?? ""
+            print("[Hearth] detectPresence raw=\(raw.prefix(40)) -> first=\(first)")
+            return first == "yes" || first == "y"
+        } catch {
+            try? await openSession()
+            return nil
+        }
+    }
+
     // Parse Gemma's REASONING/VERDICT reply. Tolerates label drift (case,
     // missing colon) and falls back to first-word heuristic if Gemma
     // skipped the format. Always returns something so the UI never goes
