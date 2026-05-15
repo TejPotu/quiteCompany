@@ -8,6 +8,7 @@ struct TVScreen: View {
     @Environment(PresenceMonitor.self) private var presence
     @Environment(CaregiverAlerter.self) private var alerter
     @State private var showingWellness = false
+    @State private var ingestedInboxIds: Set<Int> = []
     @State private var paused = false
     @State private var stopped = false
     @State private var playing: Show = FavouritesData.all[0]
@@ -37,6 +38,13 @@ struct TVScreen: View {
                 if presence.alertActive {
                     presenceAlertBanner
                 }
+            }
+
+            ForEach(alerter.inbox) { msg in
+                CaregiverMessageCard(message: msg) {
+                    Task { await alerter.acknowledge(msg) }
+                }
+                .transition(.opacity.combined(with: .move(edge: .top)))
             }
 
             if !stopped {
@@ -92,6 +100,24 @@ struct TVScreen: View {
             presence.attach(gemma: gemma)
             presence.attach(alerter: alerter)
         }
+        .task {
+            // Anchor cursor so messages sent BEFORE the app opened don't
+            // suddenly appear when polling starts. Then long-poll.
+            await alerter.anchorInboxToNow()
+            while !Task.isCancelled {
+                await alerter.pollInbox()
+                // Each new inbound note becomes a cue so the voice
+                // orchestrator can answer questions about it later.
+                for msg in alerter.inbox where !ingestedInboxIds.contains(msg.id) {
+                    ingestedInboxIds.insert(msg.id)
+                    await ingestMessageAsCue(msg)
+                }
+                // pollInbox uses Telegram's long-poll timeout=25; the
+                // sleep below is just a safety yield for cancellation.
+                try? await Task.sleep(for: .seconds(1))
+            }
+        }
+        .animation(.easeInOut(duration: 0.25), value: alerter.inbox.map(\.id))
         .task {
             // Poll Roku state while screen is visible. Cancels on disappear.
             while !Task.isCancelled {
@@ -819,6 +845,60 @@ struct TVScreen: View {
         }
     }
 
+    // MARK: - Inbound notes → cues
+    //
+    // Turn each caregiver Telegram note into a cue so the Watch voice
+    // orchestrator can answer "where is Sarah?" / "what's for dinner?"
+    // later. Gemma reads the note and predicts likely follow-up questions
+    // — those become the cue's "Hears" keywords. The verbatim message is
+    // the cue's value, prefixed with sender + timestamp for grounding.
+    //
+    // One rolling cue per sender — a new note from Sarah replaces her
+    // previous one, so the catalog doesn't bloat over a long evening of
+    // back-and-forth.
+    private func ingestMessageAsCue(_ msg: CaregiverAlerter.InboundMessage) async {
+        let stamp = Self.fmtNoteTime(msg.sentAt)
+        let cueName = "Note from \(msg.senderName)"
+
+        // Predicted questions from Gemma; fall back to a small generic set
+        // if Gemma isn't ready (still loading, etc.) so the cue is at
+        // least somewhat reachable.
+        let predicted = await gemma.extractQuestionsForCue(
+            message: msg.text,
+            sender: msg.senderName
+        )
+        let keywords = predicted ?? [
+            "where is \(msg.senderName.lowercased())",
+            "when is \(msg.senderName.lowercased()) coming home",
+            "is \(msg.senderName.lowercased()) home",
+            "what did \(msg.senderName.lowercased()) say",
+            "any messages",
+            "any news"
+        ]
+
+        let value = "\(msg.senderName) sent this at \(stamp): \"\(msg.text)\""
+
+        // Replace any prior note from the same sender so we keep just the
+        // latest plan (case-insensitive name match).
+        let priorIds = cues.entries
+            .filter { $0.name.lowercased() == cueName.lowercased() }
+            .map(\.id)
+        for id in priorIds { cues.delete(id) }
+
+        var entry = CueEntry.blank
+        entry.name = cueName
+        entry.keywords = keywords
+        entry.value = value
+        entry.imageName = "heart"
+        cues.upsert(entry)
+    }
+
+    private static func fmtNoteTime(_ d: Date) -> String {
+        let f = DateFormatter()
+        f.dateFormat = "h:mm a"
+        return f.string(from: d)
+    }
+
     // MARK: - Wellness (presence monitor surface)
 
     // Compact pill at the bottom of the page. Three states:
@@ -1286,6 +1366,61 @@ struct WellnessSheet: View {
     private static func fmtTime(_ d: Date) -> String {
         let f = DateFormatter()
         f.dateFormat = "h:mm:ss a"
+        return f.string(from: d)
+    }
+}
+
+// MARK: - Caregiver message card
+//
+// Personal note from the caregiver, surfaced full-width at the top of the
+// Watch tab. Big serif so dad can read it without his glasses; "FROM
+// SARAH · 5:42 PM" eyebrow so he knows who sent it; one big "Got it"
+// button that dismisses the card AND sends a "✓ Read at 5:43 PM" back to
+// Telegram so the daughter knows it landed.
+private struct CaregiverMessageCard: View {
+    let message: CaregiverAlerter.InboundMessage
+    let onAcknowledge: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            HStack(spacing: 12) {
+                ZStack {
+                    Circle().fill(HearthColor.ember.opacity(0.18)).frame(width: 44, height: 44)
+                    Icon(name: "heart", size: 22, color: HearthColor.ember)
+                }
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("FROM \(message.senderName.uppercased()) · \(Self.fmtTime(message.sentAt))")
+                        .font(HearthFont.sans(size: 13, weight: .bold))
+                        .tracking(1.6)
+                        .foregroundStyle(HearthColor.ember)
+                    Text("A note for you")
+                        .font(HearthFont.serif(size: 22, weight: .medium))
+                        .foregroundStyle(HearthColor.inkSoft)
+                }
+                Spacer()
+            }
+
+            Text(message.text)
+                .font(HearthFont.serif(size: 36, weight: .medium))
+                .tracking(-0.3)
+                .foregroundStyle(HearthColor.ink)
+                .lineSpacing(4)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+            HStack {
+                Spacer()
+                HearthButton("Got it", kind: .primary, icon: "check", action: onAcknowledge)
+            }
+        }
+        .padding(28)
+        .background(RoundedRectangle(cornerRadius: 32).fill(HearthColor.cardWarm))
+        .overlay(RoundedRectangle(cornerRadius: 32).stroke(HearthColor.ember.opacity(0.5), lineWidth: 2))
+    }
+
+    private static func fmtTime(_ d: Date) -> String {
+        let f = DateFormatter()
+        f.dateFormat = "h:mm a"
         return f.string(from: d)
     }
 }

@@ -26,6 +26,20 @@ final class CaregiverAlerter {
     var chatId: String   { didSet { persist(.chatId, chatId) } }
     private(set) var lastResult: LastSendResult = .never
 
+    // Inbox — caregiver-authored messages waiting for the patient to ack.
+    // Populated by pollInbox(). Filtered to only the configured chat_id so
+    // strangers who message the bot can't push content onto the iPad.
+    private(set) var inbox: [InboundMessage] = []
+    private var lastUpdateId: Int = 0
+
+    struct InboundMessage: Identifiable, Equatable {
+        let id: Int          // Telegram message_id
+        let updateId: Int    // for offset bookkeeping
+        let text: String
+        let sentAt: Date
+        let senderName: String
+    }
+
     var isConfigured: Bool {
         !botToken.trimmingCharacters(in: .whitespaces).isEmpty
             && !chatId.trimmingCharacters(in: .whitespaces).isEmpty
@@ -77,6 +91,98 @@ final class CaregiverAlerter {
             lastResult = .failure(error.localizedDescription, Date())
             return false
         }
+    }
+
+    // MARK: - Inbox (incoming from the caregiver)
+
+    // Drop messages that arrived before Hearth opened so we don't replay
+    // every old chat on launch. Called from the TVScreen .task once on
+    // first poll.
+    func anchorInboxToNow() async {
+        guard isConfigured else { return }
+        let token = botToken.trimmingCharacters(in: .whitespaces)
+        guard let url = URL(string: "https://api.telegram.org/bot\(token)/getUpdates?offset=-1") else {
+            return
+        }
+        guard let (data, _) = try? await URLSession.shared.data(from: url),
+              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let results = json["result"] as? [[String: Any]],
+              let lastUpdate = results.last,
+              let updateId = lastUpdate["update_id"] as? Int
+        else { return }
+        // Bump our cursor past the latest known update so future polls
+        // only return things that arrived AFTER Hearth opened.
+        lastUpdateId = updateId
+    }
+
+    /// Long-poll for new messages addressed to the configured chat. Safe to
+    /// call repeatedly; only new updates make it into `inbox`.
+    func pollInbox() async {
+        guard isConfigured else { return }
+        let token = botToken.trimmingCharacters(in: .whitespaces)
+        let configuredChat = chatId.trimmingCharacters(in: .whitespaces)
+        let offset = lastUpdateId + 1
+        // timeout=25 makes Telegram hold the request open until either a
+        // message arrives or 25s passes — far gentler than 30s busy-polling.
+        guard let url = URL(string: "https://api.telegram.org/bot\(token)/getUpdates?offset=\(offset)&timeout=25") else {
+            return
+        }
+        var req = URLRequest(url: url)
+        req.timeoutInterval = 30
+
+        guard let (data, _) = try? await URLSession.shared.data(for: req),
+              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let results = json["result"] as? [[String: Any]]
+        else { return }
+
+        for update in results {
+            guard let updateId = update["update_id"] as? Int else { continue }
+            lastUpdateId = max(lastUpdateId, updateId)
+
+            guard let message = update["message"] as? [String: Any],
+                  let messageId = message["message_id"] as? Int,
+                  let chat = message["chat"] as? [String: Any],
+                  let chatIdValue = chat["id"] as? Int,
+                  String(chatIdValue) == configuredChat,
+                  let text = message["text"] as? String,
+                  let date = message["date"] as? TimeInterval
+            else { continue }
+
+            // Don't surface our own outbound acks back to the screen.
+            if text.hasPrefix("✓") || text.hasPrefix("✨") || text.hasPrefix("🚨") || text.hasPrefix("✅") {
+                continue
+            }
+
+            let from = (message["from"] as? [String: Any])
+            let senderName = (from?["first_name"] as? String)
+                ?? (from?["username"] as? String)
+                ?? "Family"
+
+            let already = inbox.contains { $0.id == messageId }
+            if !already {
+                inbox.append(InboundMessage(
+                    id: messageId,
+                    updateId: updateId,
+                    text: text,
+                    sentAt: Date(timeIntervalSince1970: date),
+                    senderName: senderName
+                ))
+            }
+        }
+    }
+
+    /// Mark a message acknowledged. Removes it from the inbox and sends a
+    /// silent "✓ Read at 5:43 PM" back so the caregiver knows it landed.
+    func acknowledge(_ message: InboundMessage) async {
+        inbox.removeAll { $0.id == message.id }
+        let stamp = Self.fmtTime(Date())
+        await send(text: "✓ Read at \(stamp)")
+    }
+
+    private static func fmtTime(_ d: Date) -> String {
+        let f = DateFormatter()
+        f.dateFormat = "h:mm a"
+        return f.string(from: d)
     }
 
     // MARK: - Persistence

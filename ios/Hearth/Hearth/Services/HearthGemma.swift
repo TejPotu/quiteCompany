@@ -411,6 +411,70 @@ final class HearthGemma {
         return VerifyResult(isMatch: verdict ?? false, reasoning: reasoning)
     }
 
+    // MARK: - Cue extraction from inbound notes
+    //
+    // When the caregiver sends a Telegram note ("Hi dad, staying late, home
+    // around 8, lasagna in the fridge"), we want Hearth to answer dad's
+    // future "where is Sarah?" / "when is dinner?" with that information.
+    // The cue catalog already does that — but only if the right keywords
+    // are on the cue. Gemma reads the note and predicts likely questions
+    // dad might ask, which become the cue's keywords.
+    func extractQuestionsForCue(message: String, sender: String) async -> [String]? {
+        guard case .ready = status, let engine, !generating else { return nil }
+        generating = true
+        defer { generating = false }
+
+        let user = """
+        Below is a short note from \(sender) to an older relative who has
+        mild memory difficulty.
+
+        NOTE: "\(message)"
+
+        Predict 5 to 8 SHORT questions that relative might ask LATER, where
+        this note is the answer. Cover:
+          - where \(sender) is or what they're doing
+          - when \(sender) is coming home / when something happens
+          - any specific facts (food, plans, instructions) mentioned
+
+        Reply with ONE question per line. No numbering, no bullets, no
+        quotation marks, no preamble. Plain question text only.
+        """
+        let prompt = "<|turn>user\n\(user)\n<turn|>\n<|turn>model\n"
+
+        do {
+            // Reopen the session with more tokens than the default 96 so
+            // we get the full list. Restore the default afterwards so the
+            // next streaming generation behaves as before.
+            if sessionOpen { engine.closeSession(); sessionOpen = false }
+            try await engine.openSession(temperature: 0.4, maxTokens: 220)
+            sessionOpen = true
+            var out = ""
+            for try await chunk in engine.sessionGenerateStreaming(input: prompt) {
+                out += chunk
+            }
+            engine.closeSession()
+            sessionOpen = false
+            try? await openSession()
+
+            let cleaned = clean(out)
+            let lines = cleaned
+                .split(whereSeparator: \.isNewline)
+                .map {
+                    String($0)
+                        .trimmingCharacters(in: .whitespaces)
+                        .trimmingCharacters(in: CharacterSet(charactersIn: "0123456789.-•* \""))
+                        .trimmingCharacters(in: .whitespaces)
+                }
+                .filter { !$0.isEmpty && $0.count <= 80 }
+                .prefix(8)
+            let result = Array(lines)
+            return result.isEmpty ? nil : result
+        } catch {
+            try? await openSession()
+            return nil
+        }
+    }
+
     private static func fmtClock(_ seconds: Int) -> String {
         let m = seconds / 60
         let s = seconds % 60
