@@ -179,6 +179,16 @@ struct CueEntry: Identifiable, Equatable {
     var imageData: Data?         // caregiver-uploaded photo bytes
     var schedule: String?        // e.g. "09:00 daily (±30 min)"
     var threshold: String?       // e.g. "≥80°F hot / 60–79°F moderate / ≤50°F cold"
+    var expiresAt: Date?         // nil = never expires (caregiver-authored cues);
+                                 // set for inbound family notes so yesterday's
+                                 // "home by 8" doesn't poison today's answers
+
+    /// Whether this cue is still in effect right now. Caregiver cues with
+    /// no expiry are always live; family notes drop out 24h after sending.
+    var isLive: Bool {
+        guard let expiresAt else { return true }
+        return Date() < expiresAt
+    }
 
     static let blank = CueEntry(
         name: "",
@@ -187,7 +197,8 @@ struct CueEntry: Identifiable, Equatable {
         imageName: nil,
         imageData: nil,
         schedule: nil,
-        threshold: nil
+        threshold: nil,
+        expiresAt: nil
     )
 
     static let demoSeed: [CueEntry] = [

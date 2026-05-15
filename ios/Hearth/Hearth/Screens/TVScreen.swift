@@ -41,7 +41,10 @@ struct TVScreen: View {
             }
 
             ForEach(alerter.inbox) { msg in
-                CaregiverMessageCard(message: msg) {
+                CaregiverMessageCard(
+                    message: msg,
+                    displayName: alerter.displayName(forTelegramName: msg.senderName)
+                ) {
                     Task { await alerter.acknowledge(msg) }
                 }
                 .transition(.opacity.combined(with: .move(edge: .top)))
@@ -624,7 +627,7 @@ struct TVScreen: View {
             weatherTemperature: "72°F"
         )
 
-        let cueSpecs = cues.entries.map {
+        let cueSpecs = cues.entries.filter(\.isLive).map {
             RokuToolKit.CueSpec(
                 name: $0.name,
                 keywords: $0.keywords,
@@ -857,26 +860,27 @@ struct TVScreen: View {
     // previous one, so the catalog doesn't bloat over a long evening of
     // back-and-forth.
     private func ingestMessageAsCue(_ msg: CaregiverAlerter.InboundMessage) async {
+        let displayName = alerter.displayName(forTelegramName: msg.senderName)
         let stamp = Self.fmtNoteTime(msg.sentAt)
-        let cueName = "Note from \(msg.senderName)"
+        let cueName = "Note from \(displayName)"
 
         // Predicted questions from Gemma; fall back to a small generic set
         // if Gemma isn't ready (still loading, etc.) so the cue is at
         // least somewhat reachable.
         let predicted = await gemma.extractQuestionsForCue(
             message: msg.text,
-            sender: msg.senderName
+            sender: displayName
         )
         let keywords = predicted ?? [
-            "where is \(msg.senderName.lowercased())",
-            "when is \(msg.senderName.lowercased()) coming home",
-            "is \(msg.senderName.lowercased()) home",
-            "what did \(msg.senderName.lowercased()) say",
+            "where is \(displayName.lowercased())",
+            "when is \(displayName.lowercased()) coming home",
+            "is \(displayName.lowercased()) home",
+            "what did \(displayName.lowercased()) say",
             "any messages",
             "any news"
         ]
 
-        let value = "\(msg.senderName) sent this at \(stamp): \"\(msg.text)\""
+        let value = "\(displayName) sent this at \(stamp): \"\(msg.text)\""
 
         // Replace any prior note from the same sender so we keep just the
         // latest plan (case-insensitive name match).
@@ -890,6 +894,9 @@ struct TVScreen: View {
         entry.keywords = keywords
         entry.value = value
         entry.imageName = "heart"
+        // Family notes go stale after a day — "home by 8 tonight" should
+        // not still be on the catalog two mornings later.
+        entry.expiresAt = Date().addingTimeInterval(24 * 60 * 60)
         cues.upsert(entry)
     }
 
@@ -1229,6 +1236,18 @@ struct WellnessSheet: View {
                 .fixedSize(horizontal: false, vertical: true)
 
             VStack(alignment: .leading, spacing: 6) {
+                Text("CAREGIVER NAME (SHOWN ON THE WATCH SCREEN)")
+                    .font(HearthFont.sans(size: 11, weight: .bold))
+                    .tracking(1.4)
+                    .foregroundStyle(HearthColor.inkMute)
+                TextField("Sarah", text: $bindable.caregiverName)
+                    .font(HearthFont.sans(size: 16))
+                    .padding(12)
+                    .background(RoundedRectangle(cornerRadius: 12).fill(HearthColor.cardWarm))
+                    .autocorrectionDisabled()
+            }
+
+            VStack(alignment: .leading, spacing: 6) {
                 Text("BOT TOKEN")
                     .font(HearthFont.sans(size: 11, weight: .bold))
                     .tracking(1.4)
@@ -1379,6 +1398,7 @@ struct WellnessSheet: View {
 // Telegram so the daughter knows it landed.
 private struct CaregiverMessageCard: View {
     let message: CaregiverAlerter.InboundMessage
+    let displayName: String
     let onAcknowledge: () -> Void
 
     var body: some View {
@@ -1389,7 +1409,7 @@ private struct CaregiverMessageCard: View {
                     Icon(name: "heart", size: 22, color: HearthColor.ember)
                 }
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("FROM \(message.senderName.uppercased()) · \(Self.fmtTime(message.sentAt))")
+                    Text("FROM \(displayName.uppercased()) · \(Self.fmtTime(message.sentAt))")
                         .font(HearthFont.sans(size: 13, weight: .bold))
                         .tracking(1.6)
                         .foregroundStyle(HearthColor.ember)

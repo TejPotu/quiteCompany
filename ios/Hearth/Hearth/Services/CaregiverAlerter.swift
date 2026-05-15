@@ -24,6 +24,10 @@ final class CaregiverAlerter {
 
     var botToken: String { didSet { persist(.botToken, botToken) } }
     var chatId: String   { didSet { persist(.chatId, chatId) } }
+    /// Display name used in card eyebrows ("FROM SARAH"), cue names
+    /// ("Note from Sarah"), and predicted questions ("where is Sarah?").
+    /// When empty, falls back to whatever first_name Telegram reports.
+    var caregiverName: String { didSet { persist(.caregiverName, caregiverName) } }
     private(set) var lastResult: LastSendResult = .never
 
     // Inbox — caregiver-authored messages waiting for the patient to ack.
@@ -46,8 +50,16 @@ final class CaregiverAlerter {
     }
 
     init() {
-        self.botToken = UserDefaults.standard.string(forKey: Key.botToken.rawValue) ?? ""
-        self.chatId   = UserDefaults.standard.string(forKey: Key.chatId.rawValue)   ?? ""
+        self.botToken      = UserDefaults.standard.string(forKey: Key.botToken.rawValue) ?? ""
+        self.chatId        = UserDefaults.standard.string(forKey: Key.chatId.rawValue) ?? ""
+        self.caregiverName = UserDefaults.standard.string(forKey: Key.caregiverName.rawValue) ?? ""
+    }
+
+    /// Display name to use for an inbound message. Prefers the configured
+    /// caregiver name; falls back to whatever Telegram sent.
+    func displayName(forTelegramName telegramName: String) -> String {
+        let configured = caregiverName.trimmingCharacters(in: .whitespaces)
+        return configured.isEmpty ? telegramName : configured
     }
 
     /// Send a text message. Returns true on HTTP 200 + Telegram ok:true.
@@ -188,8 +200,9 @@ final class CaregiverAlerter {
     // MARK: - Persistence
 
     private enum Key: String {
-        case botToken = "hearth.alerter.botToken"
-        case chatId   = "hearth.alerter.chatId"
+        case botToken      = "hearth.alerter.botToken"
+        case chatId        = "hearth.alerter.chatId"
+        case caregiverName = "hearth.alerter.caregiverName"
     }
 
     private func persist(_ key: Key, _ value: String) {
