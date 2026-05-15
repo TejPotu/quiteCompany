@@ -253,6 +253,121 @@ final class HearthGemma {
         }
     }
 
+    // MARK: - Vision (pairwise person verifier)
+
+    // Result of a single pairwise comparison. `reasoning` is Gemma's own
+    // one-sentence justification — exposed to the UI so the caregiver
+    // (and the demo audience) can see Gemma actually thought about it,
+    // not just rubber-stamped yes/no.
+    struct VerifyResult: Equatable {
+        let isMatch: Bool
+        let reasoning: String
+    }
+
+    // Re-ranks the Apple Vision shortlist on the People tab. Sends the
+    // captured photo + the candidate's indexed photo through Gemma's
+    // multi-image vision path and asks for BOTH a yes/no verdict AND a
+    // short sentence explaining what Gemma saw. Returns both so the UI
+    // can render the reasoning.
+    func verifySamePerson(
+        capturedJpeg: Data,
+        referenceJpeg: Data
+    ) async -> VerifyResult {
+        guard case .ready = status, let engine, !generating else {
+            return VerifyResult(isMatch: false, reasoning: "Gemma wasn't ready.")
+        }
+        generating = true
+        defer { generating = false }
+
+        let prompt = """
+        Look at these two photographs.
+        Image 1: a candidate face to identify.
+        Image 2: a reference photo of a known person.
+
+        Are Image 1 and Image 2 photos of the SAME PERSON?
+        Compare face shape, eyes, nose, mouth, hair, age. Ignore differences
+        in lighting, pose, expression, or whether one is a screen recapture.
+
+        Reply on EXACTLY two lines, in this format and nothing else:
+        REASONING: <one short sentence (max 20 words) naming the key
+        features you compared and what they tell you>
+        VERDICT: yes
+           or
+        VERDICT: no
+        """
+
+        do {
+            // visionMultiImage uses the Conversation API, which can't run
+            // while a Session is open. Close the session, run the vision
+            // call, then reopen the session for the next text generation.
+            // Same pattern as the audio path on the Watch tab.
+            if sessionOpen { engine.closeSession(); sessionOpen = false }
+            let raw = try await engine.visionMultiImage(
+                imagesData: [capturedJpeg, referenceJpeg],
+                prompt: prompt,
+                temperature: 0.2,
+                maxTokens: 96
+            )
+            try? await openSession()
+            let result = Self.parseVerify(raw)
+            print("[Hearth] verifySamePerson raw=\(raw.prefix(160)) -> \(result)")
+            return result
+        } catch {
+            try? await openSession()
+            return VerifyResult(
+                isMatch: false,
+                reasoning: "Gemma error: \(error.localizedDescription)"
+            )
+        }
+    }
+
+    // Parse Gemma's REASONING/VERDICT reply. Tolerates label drift (case,
+    // missing colon) and falls back to first-word heuristic if Gemma
+    // skipped the format. Always returns something so the UI never goes
+    // blank on a model that decided to be creative.
+    private static func parseVerify(_ raw: String) -> VerifyResult {
+        let cleaned = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        var reasoning = ""
+        var verdict: Bool? = nil
+
+        for rawLine in cleaned.split(whereSeparator: \.isNewline) {
+            let line = String(rawLine).trimmingCharacters(in: .whitespaces)
+            let upper = line.uppercased()
+            if upper.hasPrefix("REASONING:") {
+                reasoning = String(line.dropFirst("REASONING:".count))
+                    .trimmingCharacters(in: .whitespaces)
+            } else if upper.hasPrefix("REASONING ") {
+                reasoning = String(line.dropFirst("REASONING ".count))
+                    .trimmingCharacters(in: .whitespaces)
+            } else if upper.hasPrefix("VERDICT:") {
+                let body = String(line.dropFirst("VERDICT:".count))
+                    .trimmingCharacters(in: .whitespaces).lowercased()
+                verdict = body.hasPrefix("yes") || body == "y"
+            } else if upper.hasPrefix("VERDICT ") {
+                let body = String(line.dropFirst("VERDICT ".count))
+                    .trimmingCharacters(in: .whitespaces).lowercased()
+                verdict = body.hasPrefix("yes") || body == "y"
+            }
+        }
+
+        // Fallback: model ignored the format. Use first letter-word as the
+        // verdict and the whole reply (sans that word) as the reasoning.
+        if verdict == nil {
+            let first = cleaned
+                .lowercased()
+                .split(whereSeparator: { !$0.isLetter })
+                .first
+                .map(String.init) ?? ""
+            verdict = (first == "yes" || first == "y")
+            if reasoning.isEmpty { reasoning = cleaned }
+        }
+
+        if reasoning.isEmpty {
+            reasoning = "(Gemma gave no reasoning)"
+        }
+        return VerifyResult(isMatch: verdict ?? false, reasoning: reasoning)
+    }
+
     private static func fmtClock(_ seconds: Int) -> String {
         let m = seconds / 60
         let s = seconds % 60

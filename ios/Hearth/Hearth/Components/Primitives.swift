@@ -30,6 +30,10 @@ enum HearthIcon {
         case "question":                return "questionmark.circle.fill"
         case "map-pin":                 return "mappin.and.ellipse"
         case "cake":                    return "gift.fill"
+        case "camera":                  return "camera.fill"
+        case "pencil":                  return "pencil"
+        case "plus":                    return "plus"
+        case "trash":                   return "trash.fill"
         default:                        return "questionmark"
         }
     }
