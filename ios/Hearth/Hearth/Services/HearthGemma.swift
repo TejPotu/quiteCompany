@@ -107,11 +107,54 @@ final class HearthGemma {
         let weatherTemperature: String? // "72°F" — for Weather cue grounding
     }
 
-    // Plans a voice action with Gemma's audio model + the RokuToolKit catalog.
-    // Single-shot tool calling: the model sees the user's audio, the current
-    // world state, the Roku tool catalog, and the caregiver-authored cue
-    // catalog, then emits one tool call per line followed by a `say` line.
-    // Returns the parsed Plan, or an empty Plan if Gemma is busy or errors out.
+    // Diagnostic trace for a single voice-routing turn. Captures the exact
+    // prompt sent to Gemma (so we can spot a catalog/cue divergence), the
+    // raw model output (so we can see whether the parser stripped useful
+    // narration), the parsed plan, and timing/size hints. Published as an
+    // @Observable property so the TVScreen debug card refreshes after every
+    // tap-to-talk without us having to thread the value back through the
+    // call site.
+    struct VoiceTrace: Equatable {
+        let promptUsed: String
+        let rawResponse: String
+        let plan: RokuToolKit.Plan
+        let elapsed: TimeInterval
+        let audioBytes: Int
+        let timestamp: Date
+        // Best-effort transcript of what Gemma seems to have heard — the
+        // first orphan (non-`say`, non-tool) line in the raw response. The
+        // audio model often leaks its internal transcription as the first
+        // line; surfacing it in the UI's "Heard" column makes ASR errors
+        // visible instead of mysterious. nil when Gemma cleanly produced
+        // only tool calls + a `say` line.
+        let likelyHeard: String?
+    }
+
+    private(set) var lastVoiceTrace: VoiceTrace? = nil
+
+    // Plans a voice action via a 2-step pipeline:
+    //
+    //   Step 1 (audio → text): engine.audio() with a strict transcribe-only
+    //                          prompt. The audio model does ONE thing well —
+    //                          ASR — and is not asked to route or speak in
+    //                          character.
+    //   Step 2 (text → plan):  build the same prompt planTextAction uses
+    //                          (system + catalog + cues + USER SAID: ...)
+    //                          and run it through sessionGenerateStreaming.
+    //                          The text path is proven to route correctly,
+    //                          so by routing the transcript through it we
+    //                          eliminate the audio-model's chronic problem
+    //                          of defaulting to generic greetings or
+    //                          ignoring the audio content entirely.
+    //
+    // Side effect: publishes a fresh `lastVoiceTrace` carrying the real
+    // transcript so the TV tab's Heard column makes sense.
+    //
+    // Trade-off: ~2× latency (one audio call + one text call) but the audio
+    // call is short (transcribe-only, maxTokens 64) so total stays in the
+    // ~6–8s range. Worth it for correctness — the previous single-shot path
+    // would mishear "play Young Sheldon" and answer "Hi there!" with no way
+    // to tell whether ASR or routing failed.
     func planVoiceAction(
         audioData: Data,
         state: VoiceWorldState,
@@ -124,9 +167,83 @@ final class HearthGemma {
         generating = true
         defer { generating = false }
 
+        let start = Date()
+
+        // ───── Step 1: transcribe ─────
+        // Prompt is intentionally minimal — the audio model is much better
+        // at ASR when not also asked to route, route into a tool catalog,
+        // or stay in character. We rip everything else out.
+        let transcribePrompt = """
+        Transcribe the audio. Output ONLY the exact words actually spoken,
+        in plain English.
+
+        Hard rules:
+        - Do NOT add words that weren't spoken.
+        - Do NOT interpret, embellish, complete, or extend the sentence.
+        - Do NOT add sentiment ("I miss her", "please", "thanks") if it
+          wasn't said.
+        - Do NOT add quotes, labels, prefixes, or commentary.
+        - If part is unclear, transcribe only the part you heard. Do not
+          fill in the rest.
+        - If the audio is silent or unintelligible, output an empty line.
+
+        Reply with the transcription only — nothing else.
+        """
+        var transcript = ""
+        do {
+            if sessionOpen { engine.closeSession(); sessionOpen = false }
+            let raw = try await engine.audio(
+                audioData: audioData,
+                prompt: transcribePrompt,
+                format: .wav,
+                temperature: 0.1,
+                maxTokens: 80
+            )
+            transcript = clean(raw)
+                .trimmingCharacters(in: CharacterSet(charactersIn: "\"' \t\n"))
+        } catch {
+            try? await openSession()
+            status = .error(error.localizedDescription)
+            let fallback = RokuToolKit.Plan(
+                calls: [],
+                narration: "I had trouble hearing — try once more?"
+            )
+            lastVoiceTrace = VoiceTrace(
+                promptUsed: transcribePrompt,
+                rawResponse: "ERROR (transcribe): \(error.localizedDescription)",
+                plan: fallback,
+                elapsed: Date().timeIntervalSince(start),
+                audioBytes: audioData.count,
+                timestamp: Date(),
+                likelyHeard: nil
+            )
+            return fallback
+        }
+
+        // Empty transcript = nothing to route. Surface a clarification.
+        guard !transcript.isEmpty else {
+            let fallback = RokuToolKit.Plan(
+                calls: [],
+                narration: "I didn't catch that — try once more?"
+            )
+            lastVoiceTrace = VoiceTrace(
+                promptUsed: transcribePrompt,
+                rawResponse: "(empty transcript)",
+                plan: fallback,
+                elapsed: Date().timeIntervalSince(start),
+                audioBytes: audioData.count,
+                timestamp: Date(),
+                likelyHeard: nil
+            )
+            return fallback
+        }
+
+        // ───── Step 2: route via text path ─────
+        // Same shape as planTextAction's prompt — system + catalog +
+        // USER SAID line — so the proven text router handles routing.
         let catalog = RokuToolKit.catalog(showTitles: showTitles, cues: cues)
         let stateBlock = formatState(state)
-        let prompt = """
+        let system = """
         You are Hearth's voice companion on the iPad. You help this person, who
         has mild memory difficulty, in two ways:
           1) ANSWER questions using the CUES — caregiver-authored facts about
@@ -141,22 +258,49 @@ final class HearthGemma {
 
         \(catalog)
         """
+        let routePrompt = "<|turn>user\n\(system)\n\nUSER SAID: \(transcript)\n<turn|>\n<|turn>model\n"
 
         do {
             if sessionOpen { engine.closeSession(); sessionOpen = false }
-            let result = try await engine.audio(
-                audioData: audioData,
-                prompt: prompt,
-                format: .wav,
-                temperature: 0.3,
-                maxTokens: 256
-            )
+            try await engine.openSession(temperature: 0.3, maxTokens: 256)
+            sessionOpen = true
+            var out = ""
+            for try await chunk in engine.sessionGenerateStreaming(input: routePrompt) {
+                out += chunk
+            }
+            engine.closeSession()
+            sessionOpen = false
             try? await openSession()
-            return RokuToolKit.parse(clean(result))
+
+            let cleaned = clean(out)
+            let plan = RokuToolKit.parse(cleaned)
+            lastVoiceTrace = VoiceTrace(
+                promptUsed: routePrompt,
+                rawResponse: cleaned,
+                plan: plan,
+                elapsed: Date().timeIntervalSince(start),
+                audioBytes: audioData.count,
+                timestamp: Date(),
+                likelyHeard: transcript
+            )
+            return plan
         } catch {
             try? await openSession()
             status = .error(error.localizedDescription)
-            return RokuToolKit.Plan(calls: [], narration: "I had trouble hearing — try once more?")
+            let fallback = RokuToolKit.Plan(
+                calls: [],
+                narration: "I had trouble understanding — try once more?"
+            )
+            lastVoiceTrace = VoiceTrace(
+                promptUsed: routePrompt,
+                rawResponse: "ERROR (route): \(error.localizedDescription)",
+                plan: fallback,
+                elapsed: Date().timeIntervalSince(start),
+                audioBytes: audioData.count,
+                timestamp: Date(),
+                likelyHeard: transcript
+            )
+            return fallback
         }
     }
 
@@ -250,6 +394,81 @@ final class HearthGemma {
         } catch {
             status = .error(error.localizedDescription)
             return nil
+        }
+    }
+
+    // MARK: - Text-mode planning (debug)
+    //
+    // Mirrors planVoiceAction's prompt but feeds Gemma a typed string
+    // instead of audio so we can iterate on routing/cues without
+    // recording every test. Returns the parsed Plan plus the raw model
+    // output and the exact prompt sent — both critical for the
+    // WellnessSheet debug pane.
+    struct TextPlanResult {
+        let plan: RokuToolKit.Plan
+        let rawResponse: String
+        let promptUsed: String
+        let elapsed: TimeInterval
+    }
+
+    func planTextAction(
+        text: String,
+        state: VoiceWorldState,
+        showTitles: [String],
+        cues: [RokuToolKit.CueSpec] = []
+    ) async -> TextPlanResult? {
+        guard case .ready = status, let engine, !generating else { return nil }
+        generating = true
+        defer { generating = false }
+
+        let catalog = RokuToolKit.catalog(showTitles: showTitles, cues: cues)
+        let stateBlock = formatState(state)
+        let system = """
+        You are Hearth's voice companion on the iPad. You help this person, who
+        has mild memory difficulty, in two ways:
+          1) ANSWER questions using the CUES — caregiver-authored facts about
+             this specific person. This is your primary job.
+          2) ACT on TV requests using the TOOLS.
+
+        Speak warmly, briefly, as if mid-conversation. Never frame yourself as
+        a TV-only helper — cues are first-class.
+
+        RIGHT NOW
+        \(stateBlock)
+
+        \(catalog)
+        """
+        let prompt = "<|turn>user\n\(system)\n\nUSER SAID: \(text)\n<turn|>\n<|turn>model\n"
+
+        let start = Date()
+        do {
+            // Fresh session so previous debug calls don't bleed in.
+            if sessionOpen { engine.closeSession(); sessionOpen = false }
+            try await engine.openSession(temperature: 0.3, maxTokens: 256)
+            sessionOpen = true
+            var out = ""
+            for try await chunk in engine.sessionGenerateStreaming(input: prompt) {
+                out += chunk
+            }
+            engine.closeSession()
+            sessionOpen = false
+            try? await openSession()
+            let elapsed = Date().timeIntervalSince(start)
+            let cleaned = clean(out)
+            return TextPlanResult(
+                plan: RokuToolKit.parse(cleaned),
+                rawResponse: cleaned,
+                promptUsed: prompt,
+                elapsed: elapsed
+            )
+        } catch {
+            try? await openSession()
+            return TextPlanResult(
+                plan: RokuToolKit.Plan(calls: [], narration: "Error: \(error.localizedDescription)"),
+                rawResponse: "ERROR: \(error.localizedDescription)",
+                promptUsed: prompt,
+                elapsed: Date().timeIntervalSince(start)
+            )
         }
     }
 

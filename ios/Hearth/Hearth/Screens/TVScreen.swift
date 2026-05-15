@@ -1,5 +1,6 @@
 import SwiftUI
 import Combine
+import AVFoundation
 
 struct TVScreen: View {
     @Environment(RokuController.self) private var roku
@@ -7,8 +8,15 @@ struct TVScreen: View {
     @Environment(CueStore.self) private var cues
     @Environment(PresenceMonitor.self) private var presence
     @Environment(CaregiverAlerter.self) private var alerter
+    @Environment(HearthTTS.self) private var tts
     @State private var showingWellness = false
     @State private var ingestedInboxIds: Set<Int> = []
+    // Caregiver-toggleable trace card under "Hearth says". Lets us compare the
+    // voice path's prompt/raw/plan against the text router in WellnessSheet —
+    // critical for diagnosing why voice misroutes a question that the text
+    // pane gets right. Default ON so a debug build surfaces it without an
+    // extra step; caregiver can flip it off from Wellness for clean demos.
+    @AppStorage("hearth.debug.voice.enabled") private var debugVoiceEnabled = true
     @State private var paused = false
     @State private var stopped = false
     @State private var playing: Show = FavouritesData.all[0]
@@ -34,6 +42,10 @@ struct TVScreen: View {
         Page(spacing: 24, horizontalPadding: 48, topPadding: 24) {
             ContextStrip(says: says, heard: heard)
 
+            if debugVoiceEnabled, let trace = gemma.lastVoiceTrace {
+                VoiceDebugCard(trace: trace)
+            }
+
             TimelineView(.periodic(from: .now, by: 15)) { _ in
                 if presence.alertActive {
                     presenceAlertBanner
@@ -41,13 +53,21 @@ struct TVScreen: View {
             }
 
             ForEach(alerter.inbox) { msg in
+                let speaker = alerter.displayName(forTelegramName: msg.senderName)
                 CaregiverMessageCard(
                     message: msg,
-                    displayName: alerter.displayName(forTelegramName: msg.senderName)
-                ) {
-                    Task { await alerter.acknowledge(msg) }
-                }
+                    displayName: speaker,
+                    onAcknowledge: {
+                        Task { await alerter.acknowledge(msg) }
+                    },
+                    onReplay: {
+                        tts.speak("Message from \(speaker). \(msg.text)")
+                    }
+                )
                 .transition(.opacity.combined(with: .move(edge: .top)))
+                .onAppear {
+                    tts.speak("Message from \(speaker). \(msg.text)")
+                }
             }
 
             if !stopped {
@@ -96,6 +116,10 @@ struct TVScreen: View {
             WellnessSheet(
                 presence: presence,
                 alerter: alerter,
+                tts: tts,
+                gemma: gemma,
+                cues: cues,
+                showTitles: FavouritesData.all.map(\.title),
                 onDismiss: { showingWellness = false }
             )
         }
@@ -455,9 +479,18 @@ struct TVScreen: View {
         Task { await roku.launchShow(show) }
     }
 
-    private func speak(_ heardText: String, _ saysText: String) {
+    // The on-screen `Hearth says` strip and the spoken-aloud voice don't
+    // always want the same content. Listening/processing chips ("I'm
+    // listening…", "Let me see what you said…") need to render visually
+    // so the UI feels alive, but they should NOT be read aloud — the
+    // patient hears nonstop chatter on every interaction.
+    //
+    // Default behavior is speak-aloud (most callers want it). Intermediate
+    // states pass `speakAloud: false` to render-only.
+    private func speak(_ heardText: String, _ saysText: String, speakAloud: Bool = true) {
         heard = heardText
         says = saysText
+        if speakAloud { tts.speak(saysText) }
     }
 
     // Intent helpers — narration + Roku side-effect together.
@@ -591,7 +624,7 @@ struct TVScreen: View {
         }
         voiceState = .recording
         recordingStartedAt = Date()
-        speak("listening", "I'm listening — what would you like?")
+        speak("listening", "I'm listening — what would you like?", speakAloud: false)
         // Auto-stop after the cap so dementia users never get stuck recording.
         Task {
             try? await Task.sleep(for: .seconds(Self.recordCapSeconds))
@@ -605,7 +638,7 @@ struct TVScreen: View {
         guard voiceState == .recording else { return }
         voiceState = .thinking
         recordingStartedAt = nil
-        speak("thinking", "Let me see what you said…")
+        speak("thinking", "Let me see what you said…", speakAloud: false)
         guard let data = recorder.stop() else {
             voiceState = .idle
             speak("voice", "I didn't catch that — try again?")
@@ -674,7 +707,12 @@ struct TVScreen: View {
             : (plan.calls.isEmpty
                 ? "I didn't quite catch that — try again?"
                 : "Done.")
-        speak("voice", narration)
+        // Surface Gemma's internal transcription guess (if any) in the
+        // "Heard" column so ASR errors are visible instead of mysterious.
+        // Falls back to "voice" when Gemma cleanly produced only tools +
+        // narration with no leaked transcript.
+        let heardText = gemma.lastVoiceTrace?.likelyHeard ?? "voice"
+        speak(heardText, narration)
     }
 
     private func rokuStatusString() -> String {
@@ -806,7 +844,7 @@ struct TVScreen: View {
     //   4. If the Roku is unreachable, fall back to mock copy so the screen
     //      still reads coherently.
     private func whatsHappening() async {
-        speak("what's happening?", "Let me see…")
+        speak("what's happening?", "Let me see…", speakAloud: false)
         let media = await roku.mediaPlayerState()
 
         if let media, gemma.status == .ready {
@@ -880,7 +918,14 @@ struct TVScreen: View {
             "any news"
         ]
 
-        let value = "\(displayName) sent this at \(stamp): \"\(msg.text)\""
+        // Avoid wrapping the message text in nested quotes — Gemma can
+        // mistake quoted content for the user's question and echo it
+        // instead of using it as the answer. Plain declarative prose
+        // works better in the cue catalog.
+        let cleanedText = msg.text
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .replacingOccurrences(of: "\"", with: "")
+        let value = "At \(stamp) today, \(displayName) sent this message: \(cleanedText)"
 
         // Replace any prior note from the same sender so we keep just the
         // latest plan (case-insensitive name match).
@@ -1018,10 +1063,24 @@ struct FlowingHStack<Content: View>: View {
 struct WellnessSheet: View {
     let presence: PresenceMonitor
     let alerter: CaregiverAlerter
+    let tts: HearthTTS
+    let gemma: HearthGemma
+    let cues: CueStore
+    let showTitles: [String]
     let onDismiss: () -> Void
 
     @State private var ticker = Date()
     @State private var sendingTest = false
+
+    // Debug pane state
+    @State private var debugQuery: String = ""
+    @State private var debugResult: HearthGemma.TextPlanResult? = nil
+    @State private var debugBusy = false
+    @State private var showDebugPrompt = false
+    // Controls the voice-trace card under "Hearth says" on the TV tab.
+    // Persisted so caregivers don't have to re-enable it each launch when
+    // they're actively iterating on routing prompts.
+    @AppStorage("hearth.debug.voice.enabled") private var debugVoiceEnabled = true
 
     var body: some View {
         ScrollView {
@@ -1029,7 +1088,10 @@ struct WellnessSheet: View {
                 header
                 statusCard
                 controlsCard
+                spokenAloudCard
+                voicePickerCard
                 caregiverAlertsCard
+                debugRouterCard
                 samplesCard
             }
             .padding(28)
@@ -1217,6 +1279,170 @@ struct WellnessSheet: View {
         .buttonStyle(.plain)
     }
 
+    private var spokenAloudCard: some View {
+        @Bindable var bindable = tts
+        return VStack(alignment: .leading, spacing: 14) {
+            HStack(spacing: 10) {
+                Icon(name: "speaker-high", size: 18, color: HearthColor.ember)
+                Text("SPOKEN ALOUD")
+                    .font(HearthFont.sans(size: 13, weight: .bold))
+                    .tracking(1.6)
+                    .foregroundStyle(HearthColor.ember)
+                Rectangle().fill(HearthColor.ember.opacity(0.25)).frame(height: 1)
+            }
+            Toggle(isOn: $bindable.isEnabled) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Read responses aloud")
+                        .font(HearthFont.sans(size: 18, weight: .bold))
+                        .foregroundStyle(HearthColor.ink)
+                    Text("Voice narration, family notes, and recognised faces. The TV's audio quiets while Hearth speaks.")
+                        .font(HearthFont.sans(size: 14))
+                        .foregroundStyle(HearthColor.inkSoft)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            .tint(HearthColor.ember)
+
+            HStack {
+                Spacer()
+                HearthButton("Speak test", kind: .secondary, icon: "sparkle") {
+                    tts.speak("Hi. Hearth's voice is ready. I'll read messages and answers aloud so you don't have to read them yourself.")
+                }
+                .opacity(tts.isEnabled ? 1 : 0.5)
+                .disabled(!tts.isEnabled)
+            }
+        }
+        .padding(22)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: 24).fill(HearthColor.card))
+        .overlay(RoundedRectangle(cornerRadius: 24).stroke(HearthColor.borderSoft, lineWidth: 1))
+    }
+
+    private var voicePickerCard: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(spacing: 10) {
+                Icon(name: "sparkle", size: 18, color: HearthColor.ember)
+                Text("HEARTH'S VOICE")
+                    .font(HearthFont.sans(size: 13, weight: .bold))
+                    .tracking(1.6)
+                    .foregroundStyle(HearthColor.ember)
+                Rectangle().fill(HearthColor.ember.opacity(0.25)).frame(height: 1)
+            }
+
+            Text("Tap a voice to hear it. Ava (Premium) is widely considered the most natural English voice on iOS — Apple's newest neural voice. Zoe and Allison (Premium) are close seconds.")
+                .font(HearthFont.sans(size: 14))
+                .foregroundStyle(HearthColor.inkSoft)
+                .lineSpacing(2)
+                .fixedSize(horizontal: false, vertical: true)
+
+            let voices = HearthTTS.voicesForPicker()
+            if voices.isEmpty {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("No Premium or Enhanced voices installed yet.")
+                        .font(HearthFont.sans(size: 14, weight: .bold))
+                        .foregroundStyle(HearthColor.ink)
+                    Text("Open iOS Settings (button below) and download one — Ava (Premium) is our top pick.")
+                        .font(HearthFont.sans(size: 13))
+                        .foregroundStyle(HearthColor.inkSoft)
+                }
+                .padding(14)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(RoundedRectangle(cornerRadius: 14).fill(HearthColor.cardWarm))
+            } else {
+                VStack(spacing: 8) {
+                    ForEach(voices, id: \.identifier) { voice in
+                        voiceRow(voice)
+                    }
+                }
+            }
+
+            HStack(spacing: 12) {
+                Button {
+                    if let url = URL(string: "App-Prefs:ACCESSIBILITY"),
+                       UIApplication.shared.canOpenURL(url) {
+                        UIApplication.shared.open(url)
+                    } else if let url = URL(string: UIApplication.openSettingsURLString) {
+                        UIApplication.shared.open(url)
+                    }
+                } label: {
+                    HStack(spacing: 8) {
+                        Icon(name: "sparkle", size: 16, color: HearthColor.ember)
+                        Text("Get more voices in Settings")
+                            .font(HearthFont.sans(size: 14, weight: .bold))
+                            .foregroundStyle(HearthColor.ember)
+                    }
+                }
+                .buttonStyle(.plain)
+                Spacer()
+            }
+            .padding(.top, 4)
+            Text("Settings → Accessibility → Spoken Content → Voices → English → download a voice (Premium or Personal Voice). It'll appear here on next open.")
+                .font(HearthFont.sans(size: 12))
+                .foregroundStyle(HearthColor.inkMute)
+                .lineSpacing(2)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(22)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: 24).fill(HearthColor.card))
+        .overlay(RoundedRectangle(cornerRadius: 24).stroke(HearthColor.borderSoft, lineWidth: 1))
+    }
+
+    private func voiceRow(_ voice: AVSpeechSynthesisVoice) -> some View {
+        let isSelected = (tts.selectedVoiceIdentifier == voice.identifier)
+            || (tts.selectedVoiceIdentifier == nil && voice.identifier == HearthTTS.voicesForPicker().first?.identifier)
+        let qualityColor: Color = {
+            switch voice.quality {
+            case .premium:  return HearthColor.ember
+            case .enhanced: return HearthColor.sageDeep
+            default:        return HearthColor.inkMute
+            }
+        }()
+        return Button {
+            tts.selectedVoiceIdentifier = voice.identifier
+            tts.speak("Hello. This is \(voice.name). I'll read your messages and answers aloud.")
+        } label: {
+            HStack(spacing: 12) {
+                Icon(
+                    name: isSelected ? "check-circle" : "speaker-high",
+                    size: 18,
+                    color: isSelected ? HearthColor.ember : HearthColor.inkMute
+                )
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(voice.name)
+                        .font(HearthFont.sans(size: 16, weight: .bold))
+                        .foregroundStyle(HearthColor.ink)
+                    Text("\(localeName(voice.language))")
+                        .font(HearthFont.sans(size: 12))
+                        .foregroundStyle(HearthColor.inkSoft)
+                }
+                Spacer()
+                Text(voice.quality.label.uppercased())
+                    .font(HearthFont.sans(size: 11, weight: .bold))
+                    .tracking(1.2)
+                    .foregroundStyle(qualityColor)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 3)
+                    .background(Capsule().stroke(qualityColor.opacity(0.5), lineWidth: 1))
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 12)
+            .background(
+                RoundedRectangle(cornerRadius: 14)
+                    .fill(isSelected ? HearthColor.ember.opacity(0.08) : HearthColor.cardWarm)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 14)
+                    .stroke(isSelected ? HearthColor.ember : HearthColor.borderSoft, lineWidth: isSelected ? 2 : 1)
+            )
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func localeName(_ code: String) -> String {
+        Locale.current.localizedString(forIdentifier: code) ?? code
+    }
+
     private var caregiverAlertsCard: some View {
         @Bindable var bindable = alerter
         return VStack(alignment: .leading, spacing: 16) {
@@ -1334,6 +1560,202 @@ struct WellnessSheet: View {
         }
     }
 
+    private var debugRouterCard: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(spacing: 10) {
+                Icon(name: "sparkle", size: 18, color: HearthColor.ember)
+                Text("DEBUG · ROUTING")
+                    .font(HearthFont.sans(size: 13, weight: .bold))
+                    .tracking(1.6)
+                    .foregroundStyle(HearthColor.ember)
+                Rectangle().fill(HearthColor.ember.opacity(0.25)).frame(height: 1)
+            }
+
+            // Voice trace toggle — flips the card on/off under "Hearth says"
+            // on the TV tab. Default ON while we're iterating on the voice
+            // routing prompt; turn off for clean demos.
+            Toggle(isOn: $debugVoiceEnabled) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Show voice trace on TV tab")
+                        .font(HearthFont.sans(size: 15, weight: .bold))
+                        .foregroundStyle(HearthColor.ink)
+                    Text("Render the prompt, raw Gemma output, and parsed plan under \u{201C}Hearth says\u{201D} after every tap-to-talk.")
+                        .font(HearthFont.sans(size: 13))
+                        .foregroundStyle(HearthColor.inkSoft)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            .tint(HearthColor.ember)
+
+            Rectangle().fill(HearthColor.borderSoft).frame(height: 1)
+
+            Text("Type a question and see exactly how Gemma routes it. Use this to tune the prompt without recording every test.")
+                .font(HearthFont.sans(size: 14))
+                .foregroundStyle(HearthColor.inkSoft)
+                .lineSpacing(2)
+                .fixedSize(horizontal: false, vertical: true)
+
+            HStack(spacing: 10) {
+                TextField("e.g. where is Sarah", text: $debugQuery, axis: .vertical)
+                    .font(HearthFont.sans(size: 16))
+                    .padding(12)
+                    .background(RoundedRectangle(cornerRadius: 12).fill(HearthColor.cardWarm))
+                    .autocorrectionDisabled()
+                Button {
+                    Task { await runDebugQuery() }
+                } label: {
+                    HStack(spacing: 8) {
+                        if debugBusy {
+                            ProgressView().controlSize(.regular).tint(.white)
+                        } else {
+                            Icon(name: "sparkle", size: 18, color: .white)
+                        }
+                        Text(debugBusy ? "Asking…" : "Send")
+                            .font(HearthFont.sans(size: 16, weight: .bold))
+                            .foregroundStyle(.white)
+                    }
+                    .padding(.horizontal, 20)
+                    .padding(.vertical, 12)
+                    .background(Capsule().fill(HearthColor.ember))
+                }
+                .buttonStyle(.plain)
+                .disabled(debugBusy || debugQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                .opacity(debugBusy || debugQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? 0.5 : 1)
+            }
+
+            if let result = debugResult {
+                debugResultView(result)
+            }
+        }
+        .padding(22)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: 24).fill(HearthColor.card))
+        .overlay(RoundedRectangle(cornerRadius: 24).stroke(HearthColor.borderSoft, lineWidth: 1))
+    }
+
+    private func debugResultView(_ result: HearthGemma.TextPlanResult) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Text("RESPONSE · \(String(format: "%.1fs", result.elapsed))")
+                    .font(HearthFont.sans(size: 11, weight: .bold))
+                    .tracking(1.4)
+                    .foregroundStyle(HearthColor.inkMute)
+                Spacer()
+                Button {
+                    debugResult = nil
+                    debugQuery = ""
+                } label: {
+                    Text("Clear")
+                        .font(HearthFont.sans(size: 13, weight: .bold))
+                        .foregroundStyle(HearthColor.inkSoft)
+                }
+                .buttonStyle(.plain)
+            }
+
+            // Parsed plan
+            VStack(alignment: .leading, spacing: 6) {
+                Text("PARSED PLAN")
+                    .font(HearthFont.sans(size: 11, weight: .bold))
+                    .tracking(1.4)
+                    .foregroundStyle(HearthColor.inkMute)
+                if result.plan.calls.isEmpty && (result.plan.narration?.isEmpty ?? true) {
+                    Text("(empty plan)")
+                        .font(HearthFont.sans(size: 14).italic())
+                        .foregroundStyle(HearthColor.inkSoft)
+                } else {
+                    if !result.plan.calls.isEmpty {
+                        ForEach(Array(result.plan.calls.enumerated()), id: \.offset) { _, call in
+                            Text("→ \(call.name) \(call.args)")
+                                .font(HearthFont.sans(size: 14, weight: .bold).monospaced())
+                                .foregroundStyle(HearthColor.ember)
+                        }
+                    }
+                    if let narration = result.plan.narration, !narration.isEmpty {
+                        Text(narration)
+                            .font(HearthFont.serif(size: 18))
+                            .foregroundStyle(HearthColor.ink)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+            }
+            .padding(12)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(RoundedRectangle(cornerRadius: 10).fill(HearthColor.cardWarm))
+
+            // Raw Gemma output
+            DisclosureGroup("Raw Gemma output") {
+                Text(result.rawResponse.isEmpty ? "(empty)" : result.rawResponse)
+                    .font(HearthFont.sans(size: 12).monospaced())
+                    .foregroundStyle(HearthColor.inkSoft)
+                    .padding(10)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(RoundedRectangle(cornerRadius: 8).fill(HearthColor.cardWarm))
+                    .padding(.top, 6)
+            }
+            .tint(HearthColor.ember)
+            .font(HearthFont.sans(size: 13, weight: .bold))
+
+            // Full prompt
+            DisclosureGroup("Full prompt sent to Gemma") {
+                Text(result.promptUsed)
+                    .font(HearthFont.sans(size: 11).monospaced())
+                    .foregroundStyle(HearthColor.inkSoft)
+                    .padding(10)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(RoundedRectangle(cornerRadius: 8).fill(HearthColor.cardWarm))
+                    .padding(.top, 6)
+            }
+            .tint(HearthColor.ember)
+            .font(HearthFont.sans(size: 13, weight: .bold))
+        }
+    }
+
+    private func runDebugQuery() async {
+        let q = debugQuery.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !q.isEmpty else { return }
+        debugBusy = true
+        defer { debugBusy = false }
+
+        let now = Date()
+        let state = HearthGemma.VoiceWorldState(
+            rokuStatus: "ready",
+            activeShowTitle: nil,
+            activeEpisode: nil,
+            playbackState: nil,
+            positionSeconds: nil,
+            durationSeconds: nil,
+            clock: Self.fmtTimeOfDay(now),
+            dayOfWeek: Self.fmtDayOfWeek(now),
+            weatherTemperature: "72°F"
+        )
+        let cueSpecs = cues.entries.filter(\.isLive).map {
+            RokuToolKit.CueSpec(
+                name: $0.name,
+                keywords: $0.keywords,
+                value: $0.value,
+                schedule: $0.schedule,
+                threshold: $0.threshold
+            )
+        }
+        debugResult = await gemma.planTextAction(
+            text: q,
+            state: state,
+            showTitles: showTitles,
+            cues: cueSpecs
+        )
+    }
+
+    private static func fmtTimeOfDay(_ d: Date) -> String {
+        let f = DateFormatter()
+        f.dateFormat = "h:mm a"
+        return f.string(from: d)
+    }
+    private static func fmtDayOfWeek(_ d: Date) -> String {
+        let f = DateFormatter()
+        f.dateFormat = "EEEE"
+        return f.string(from: d)
+    }
+
     private var samplesCard: some View {
         VStack(alignment: .leading, spacing: 14) {
             Text("RECENT SAMPLES")
@@ -1400,6 +1822,7 @@ private struct CaregiverMessageCard: View {
     let message: CaregiverAlerter.InboundMessage
     let displayName: String
     let onAcknowledge: () -> Void
+    let onReplay: () -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
@@ -1428,7 +1851,8 @@ private struct CaregiverMessageCard: View {
                 .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: .infinity, alignment: .leading)
 
-            HStack {
+            HStack(spacing: 14) {
+                HearthButton("Read again", kind: .secondary, icon: "speaker-high", action: onReplay)
                 Spacer()
                 HearthButton("Got it", kind: .primary, icon: "check", action: onAcknowledge)
             }
@@ -1453,5 +1877,106 @@ private extension PresenceMonitor.SampleResult {
         case .absent:            return "no one visible"
         case .skipped(let why):  return "skipped (\(why))"
         }
+    }
+}
+
+// MARK: - Voice debug card
+//
+// Renders the most recent voice-routing turn under the "Hearth says" strip.
+// Mirrors the WellnessSheet text-router debug card (parsed plan + raw output
+// + full prompt) so the two paths can be compared side-by-side. Visible only
+// when caregiver enables the toggle in WellnessSheet.
+private struct VoiceDebugCard: View {
+    let trace: HearthGemma.VoiceTrace
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 10) {
+                Icon(name: "sparkle", size: 16, color: HearthColor.ember)
+                Text("DEBUG · VOICE ROUTER")
+                    .font(HearthFont.sans(size: 12, weight: .bold))
+                    .tracking(1.6)
+                    .foregroundStyle(HearthColor.ember)
+                Spacer()
+                Text("\(String(format: "%.1fs", trace.elapsed)) · \(audioSizeLabel)")
+                    .font(HearthFont.sans(size: 11, weight: .bold))
+                    .tracking(1.2)
+                    .foregroundStyle(HearthColor.inkMute)
+            }
+
+            VStack(alignment: .leading, spacing: 6) {
+                Text("PARSED PLAN")
+                    .font(HearthFont.sans(size: 10, weight: .bold))
+                    .tracking(1.4)
+                    .foregroundStyle(HearthColor.inkMute)
+                if trace.plan.calls.isEmpty && (trace.plan.narration?.isEmpty ?? true) {
+                    Text("(empty plan)")
+                        .font(HearthFont.sans(size: 13).italic())
+                        .foregroundStyle(HearthColor.inkSoft)
+                } else {
+                    if !trace.plan.calls.isEmpty {
+                        ForEach(Array(trace.plan.calls.enumerated()), id: \.offset) { _, call in
+                            Text("→ \(call.name) \(call.args)")
+                                .font(HearthFont.sans(size: 13, weight: .bold).monospaced())
+                                .foregroundStyle(HearthColor.ember)
+                        }
+                    }
+                    if let narration = trace.plan.narration, !narration.isEmpty {
+                        Text(narration)
+                            .font(HearthFont.serif(size: 16))
+                            .foregroundStyle(HearthColor.ink)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+            }
+            .padding(10)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(RoundedRectangle(cornerRadius: 10).fill(HearthColor.cardWarm))
+
+            DisclosureGroup("Raw Gemma output") {
+                ScrollView {
+                    Text(trace.rawResponse.isEmpty ? "(empty)" : trace.rawResponse)
+                        .font(HearthFont.sans(size: 11).monospaced())
+                        .foregroundStyle(HearthColor.inkSoft)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .textSelection(.enabled)
+                }
+                .frame(maxHeight: 160)
+                .padding(8)
+                .background(RoundedRectangle(cornerRadius: 8).fill(HearthColor.cardWarm))
+                .padding(.top, 6)
+            }
+            .tint(HearthColor.ember)
+            .font(HearthFont.sans(size: 12, weight: .bold))
+
+            DisclosureGroup("Full prompt sent to Gemma") {
+                ScrollView {
+                    Text(trace.promptUsed)
+                        .font(HearthFont.sans(size: 10).monospaced())
+                        .foregroundStyle(HearthColor.inkSoft)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .textSelection(.enabled)
+                }
+                .frame(maxHeight: 240)
+                .padding(8)
+                .background(RoundedRectangle(cornerRadius: 8).fill(HearthColor.cardWarm))
+                .padding(.top, 6)
+            }
+            .tint(HearthColor.ember)
+            .font(HearthFont.sans(size: 12, weight: .bold))
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: 18)
+                .fill(HearthColor.paperDeep)
+                .overlay(RoundedRectangle(cornerRadius: 18).stroke(HearthColor.ember.opacity(0.35), lineWidth: 1))
+        )
+    }
+
+    private var audioSizeLabel: String {
+        let kb = Double(trace.audioBytes) / 1024.0
+        if kb < 1024 { return String(format: "%.0f KB", kb) }
+        return String(format: "%.1f MB", kb / 1024.0)
     }
 }

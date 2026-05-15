@@ -8,6 +8,7 @@ struct HearthApp: App {
     @State private var people = PeopleStore()
     @State private var presence = PresenceMonitor()
     @State private var alerter = CaregiverAlerter()
+    @State private var tts = HearthTTS()
 
     var body: some Scene {
         WindowGroup {
@@ -18,6 +19,7 @@ struct HearthApp: App {
                 .environment(people)
                 .environment(presence)
                 .environment(alerter)
+                .environment(tts)
                 .task { await gemma.prepareIfNeeded() }
         }
     }

@@ -17,6 +17,7 @@ import PhotosUI
 struct PersonScreen: View {
     @Environment(PeopleStore.self) private var store
     @Environment(HearthGemma.self) private var gemma
+    @Environment(HearthTTS.self) private var tts
 
     @State private var capturedImage: UIImage? = nil
     @State private var matchResult: MatchOutcome? = nil
@@ -62,6 +63,9 @@ struct PersonScreen: View {
 
             captureResultCard
                 .animation(.easeInOut(duration: 0.25), value: matchStateKey)
+                .onChange(of: matchStateKey) { _, _ in
+                    if !matching { speakResult(matchResult) }
+                }
 
             manageRosterPill
         }
@@ -246,6 +250,25 @@ struct PersonScreen: View {
         } else {
             matcherUsed = .visionOnly
             matchResult = .found(bestApple.entry)
+        }
+    }
+
+    // Read the match result aloud once matching finishes. Hooked from
+    // .onChange of matchStateKey so it fires on every settled state, not
+    // just the first one in a session.
+    private func speakResult(_ result: MatchOutcome?) {
+        switch result {
+        case .found(let entry):
+            let rel = entry.relationship.isEmpty ? "" : ", \(entry.relationship.lowercased())"
+            var line = "This is \(entry.name)\(rel)."
+            if let notes = entry.notes, !notes.isEmpty {
+                line += " " + notes
+            }
+            tts.speak(line)
+        case .unknown:
+            tts.speak("I don't recognise them. Ask Sarah to add them.")
+        case .none:
+            break
         }
     }
 
