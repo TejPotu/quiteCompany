@@ -6,6 +6,7 @@ struct TVScreen: View {
     @Environment(HearthGemma.self) private var gemma
     @Environment(CueStore.self) private var cues
     @Environment(PresenceMonitor.self) private var presence
+    @Environment(CaregiverAlerter.self) private var alerter
     @State private var showingWellness = false
     @State private var paused = false
     @State private var stopped = false
@@ -83,11 +84,13 @@ struct TVScreen: View {
         .sheet(isPresented: $showingWellness) {
             WellnessSheet(
                 presence: presence,
+                alerter: alerter,
                 onDismiss: { showingWellness = false }
             )
         }
         .task {
             presence.attach(gemma: gemma)
+            presence.attach(alerter: alerter)
         }
         .task {
             // Poll Roku state while screen is visible. Cancels on disappear.
@@ -927,9 +930,11 @@ struct FlowingHStack<Content: View>: View {
 // recent samples.
 struct WellnessSheet: View {
     let presence: PresenceMonitor
+    let alerter: CaregiverAlerter
     let onDismiss: () -> Void
 
     @State private var ticker = Date()
+    @State private var sendingTest = false
 
     var body: some View {
         ScrollView {
@@ -937,6 +942,7 @@ struct WellnessSheet: View {
                 header
                 statusCard
                 controlsCard
+                caregiverAlertsCard
                 samplesCard
             }
             .padding(28)
@@ -1122,6 +1128,111 @@ struct WellnessSheet: View {
                 .background(Capsule().fill(active ? HearthColor.ember : HearthColor.cardWarm))
         }
         .buttonStyle(.plain)
+    }
+
+    private var caregiverAlertsCard: some View {
+        @Bindable var bindable = alerter
+        return VStack(alignment: .leading, spacing: 16) {
+            HStack(spacing: 10) {
+                Icon(name: "phone", size: 18, color: HearthColor.ember)
+                Text("CAREGIVER ALERTS · TELEGRAM")
+                    .font(HearthFont.sans(size: 13, weight: .bold))
+                    .tracking(1.6)
+                    .foregroundStyle(HearthColor.ember)
+                Rectangle().fill(HearthColor.ember.opacity(0.25)).frame(height: 1)
+            }
+
+            Text("When nobody's been seen for the alert window, Hearth pings a Telegram chat. Free, instant, rings the phone.")
+                .font(HearthFont.sans(size: 14))
+                .foregroundStyle(HearthColor.inkSoft)
+                .lineSpacing(2)
+                .fixedSize(horizontal: false, vertical: true)
+
+            VStack(alignment: .leading, spacing: 6) {
+                Text("BOT TOKEN")
+                    .font(HearthFont.sans(size: 11, weight: .bold))
+                    .tracking(1.4)
+                    .foregroundStyle(HearthColor.inkMute)
+                SecureField("123456:ABC-DEF…", text: $bindable.botToken)
+                    .font(HearthFont.sans(size: 16).monospaced())
+                    .padding(12)
+                    .background(RoundedRectangle(cornerRadius: 12).fill(HearthColor.cardWarm))
+            }
+            VStack(alignment: .leading, spacing: 6) {
+                Text("CHAT ID")
+                    .font(HearthFont.sans(size: 11, weight: .bold))
+                    .tracking(1.4)
+                    .foregroundStyle(HearthColor.inkMute)
+                TextField("123456789", text: $bindable.chatId)
+                    .font(HearthFont.sans(size: 16).monospaced())
+                    .padding(12)
+                    .background(RoundedRectangle(cornerRadius: 12).fill(HearthColor.cardWarm))
+                    .keyboardType(.numbersAndPunctuation)
+                    .autocorrectionDisabled()
+            }
+
+            HStack(spacing: 12) {
+                statusLine
+                Spacer()
+                HearthButton(
+                    sendingTest ? "Sending…" : "Send test",
+                    kind: .primary,
+                    icon: "sparkle"
+                ) {
+                    Task {
+                        sendingTest = true
+                        defer { sendingTest = false }
+                        await alerter.send(
+                            text: "✨ Hearth test — alerts are wired up. You'll hear from me if nobody's in the room."
+                        )
+                    }
+                }
+                .disabled(!alerter.isConfigured || sendingTest)
+                .opacity(alerter.isConfigured && !sendingTest ? 1 : 0.5)
+            }
+
+            DisclosureGroup("How do I get these?") {
+                Text("""
+                1. On Telegram, search for @BotFather and start a chat.
+                2. Send /newbot and follow the prompts. Copy the bot TOKEN it gives you.
+                3. Open your new bot and send /start so it has a chat with you.
+                4. Visit https://api.telegram.org/bot<TOKEN>/getUpdates in a browser. Find "chat":{"id": NUMBER, …} and copy that NUMBER as the CHAT ID.
+                """)
+                .font(HearthFont.sans(size: 13))
+                .foregroundStyle(HearthColor.inkSoft)
+                .lineSpacing(2)
+                .padding(.top, 6)
+            }
+            .tint(HearthColor.ember)
+        }
+        .padding(22)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: 24).fill(HearthColor.card))
+        .overlay(RoundedRectangle(cornerRadius: 24).stroke(HearthColor.borderSoft, lineWidth: 1))
+    }
+
+    @ViewBuilder private var statusLine: some View {
+        switch alerter.lastResult {
+        case .never:
+            Text(alerter.isConfigured ? "Ready · no message sent yet" : "Not configured")
+                .font(HearthFont.sans(size: 13))
+                .foregroundStyle(HearthColor.inkMute)
+        case .success(let when):
+            HStack(spacing: 6) {
+                Icon(name: "check-circle", size: 14, color: HearthColor.sageDeep)
+                Text("Sent · \(Self.fmtTime(when))")
+                    .font(HearthFont.sans(size: 13))
+                    .foregroundStyle(HearthColor.sageDeep)
+            }
+        case .failure(let msg, let when):
+            HStack(spacing: 6) {
+                Icon(name: "x-circle", size: 14, color: .red)
+                Text("Failed · \(Self.fmtTime(when)) · \(msg)")
+                    .font(HearthFont.sans(size: 13))
+                    .foregroundStyle(.red)
+                    .lineLimit(2)
+            }
+        }
     }
 
     private var samplesCard: some View {

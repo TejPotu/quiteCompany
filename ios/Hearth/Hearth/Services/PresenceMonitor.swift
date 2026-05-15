@@ -28,6 +28,12 @@ final class PresenceMonitor {
 
     private var loopTask: Task<Void, Never>?
     private weak var gemma: HearthGemma?
+    private weak var alerter: CaregiverAlerter?
+
+    // Edge-trigger state for caregiver alerts. We only fire on transitions
+    // (clear → tripped, or tripped → cleared) so the alerter doesn't spam.
+    private var lastAlertWasActive: Bool = false
+    private var lastAbsenceStartedAt: Date?
 
     enum SampleResult: Equatable {
         case unknown          // not run yet
@@ -56,6 +62,10 @@ final class PresenceMonitor {
 
     func attach(gemma: HearthGemma) {
         self.gemma = gemma
+    }
+
+    func attach(alerter: CaregiverAlerter) {
+        self.alerter = alerter
     }
 
     func start() {
@@ -153,5 +163,50 @@ final class PresenceMonitor {
         if present {
             lastSeen = now
         }
+
+        await dispatchAlertIfEdgeTriggered()
+    }
+
+    // Compare the current alertActive state to the last time we fired an
+    // outbound notification. On false→true, send the alert. On true→false
+    // (person came back), send the "all clear." No-op otherwise.
+    private func dispatchAlertIfEdgeTriggered() async {
+        let nowActive = alertActive
+        guard let alerter, alerter.isConfigured else {
+            lastAlertWasActive = nowActive
+            return
+        }
+
+        if nowActive && !lastAlertWasActive {
+            let duration = secondsSinceLastSeen.map(Self.fmtElapsed) ?? "a while"
+            let stamp = Self.fmtClock(Date())
+            await alerter.send(
+                text: "🚨 Hearth alert — nobody seen in the room for \(duration) (as of \(stamp)). Please check in."
+            )
+            lastAbsenceStartedAt = Date()
+        } else if !nowActive && lastAlertWasActive {
+            let away = lastAbsenceStartedAt.map { Self.fmtElapsed(Date().timeIntervalSince($0)) } ?? "a while"
+            let stamp = Self.fmtClock(Date())
+            await alerter.send(
+                text: "✅ Hearth — they're back in the room (was away \(away), now \(stamp))."
+            )
+        }
+        lastAlertWasActive = nowActive
+    }
+
+    static func fmtElapsed(_ seconds: TimeInterval) -> String {
+        let s = Int(seconds)
+        if s < 60 { return "\(s)s" }
+        let m = s / 60
+        if m < 60 { return "\(m) min" }
+        let h = m / 60
+        let mr = m % 60
+        return mr == 0 ? "\(h)h" : "\(h)h \(mr)m"
+    }
+
+    static func fmtClock(_ d: Date) -> String {
+        let f = DateFormatter()
+        f.dateFormat = "h:mm a"
+        return f.string(from: d)
     }
 }

@@ -7,6 +7,7 @@ struct HearthApp: App {
     @State private var cues = CueStore()
     @State private var people = PeopleStore()
     @State private var presence = PresenceMonitor()
+    @State private var alerter = CaregiverAlerter()
 
     var body: some Scene {
         WindowGroup {
@@ -16,6 +17,7 @@ struct HearthApp: App {
                 .environment(cues)
                 .environment(people)
                 .environment(presence)
+                .environment(alerter)
                 .task { await gemma.prepareIfNeeded() }
         }
     }
