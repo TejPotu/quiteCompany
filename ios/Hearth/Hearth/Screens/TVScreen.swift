@@ -1081,6 +1081,10 @@ struct WellnessSheet: View {
     // Persisted so caregivers don't have to re-enable it each launch when
     // they're actively iterating on routing prompts.
     @AppStorage("hearth.debug.voice.enabled") private var debugVoiceEnabled = true
+    // Visual theme — see Design/Colors.swift. Changes here propagate to the
+    // entire app because HearthApp keys its root content's `.id()` on this
+    // value, forcing a tree rebuild that re-reads HearthColor.
+    @AppStorage("hearth.theme") private var themeName: String = "warm"
 
     var body: some View {
         ScrollView {
@@ -1088,6 +1092,7 @@ struct WellnessSheet: View {
                 header
                 statusCard
                 controlsCard
+                themePickerCard
                 spokenAloudCard
                 voicePickerCard
                 caregiverAlertsCard
@@ -1100,6 +1105,100 @@ struct WellnessSheet: View {
         .onReceive(Timer.publish(every: 1, on: .main, in: .common).autoconnect()) { _ in
             ticker = Date()
         }
+    }
+
+    // Theme switcher — two swatches the caregiver can tap to swap the
+    // app's palette. The selection is persisted via @AppStorage and
+    // HearthApp re-keys the root view so every screen picks up the new
+    // colors at once. Side-effect: switching dismisses any open sheet
+    // (including this one), which doubles as visual confirmation that
+    // the swap took effect.
+    private var themePickerCard: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Text("APPEARANCE")
+                .font(HearthFont.sans(size: 13, weight: .bold))
+                .tracking(1.6)
+                .foregroundStyle(HearthColor.inkMute)
+            HStack(spacing: 14) {
+                themeSwatch(
+                    name: "warm",
+                    title: "Warm hearth",
+                    subtitle: "Cream paper · ember accents",
+                    swatch: HearthPalette.warm
+                )
+                themeSwatch(
+                    name: "softForest",
+                    title: "Soft forest",
+                    subtitle: "Calm sage paper · forest-green accents",
+                    swatch: HearthPalette.softForest
+                )
+            }
+        }
+        .padding(22)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: 24).fill(HearthColor.card))
+        .overlay(RoundedRectangle(cornerRadius: 24).stroke(HearthColor.borderSoft, lineWidth: 1))
+    }
+
+    private func themeSwatch(
+        name: String,
+        title: String,
+        subtitle: String,
+        swatch: HearthPalette
+    ) -> some View {
+        let selected = themeName == name
+        return Button {
+            themeName = name
+        } label: {
+            VStack(alignment: .leading, spacing: 12) {
+                ZStack(alignment: .bottomTrailing) {
+                    RoundedRectangle(cornerRadius: 14)
+                        .fill(swatch.paper)
+                        .frame(height: 64)
+                        .overlay(
+                            HStack(spacing: 6) {
+                                Circle().fill(swatch.ember).frame(width: 18, height: 18)
+                                Circle().fill(swatch.sageDeep).frame(width: 14, height: 14)
+                                Circle().fill(swatch.honey).frame(width: 14, height: 14)
+                                Spacer()
+                            }
+                            .padding(.horizontal, 12)
+                        )
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 14)
+                                .stroke(swatch.border, lineWidth: 1)
+                        )
+                    if selected {
+                        ZStack {
+                            Circle().fill(swatch.ember).frame(width: 22, height: 22)
+                            Icon(name: "check", size: 14, color: .white)
+                        }
+                        .padding(8)
+                    }
+                }
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(title)
+                        .font(HearthFont.sans(size: 15, weight: .bold))
+                        .foregroundStyle(HearthColor.ink)
+                    Text(subtitle)
+                        .font(HearthFont.sans(size: 12))
+                        .foregroundStyle(HearthColor.inkSoft)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            .padding(12)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(
+                RoundedRectangle(cornerRadius: 18)
+                    .fill(selected ? HearthColor.ember.opacity(0.08) : HearthColor.cardWarm)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 18)
+                    .stroke(selected ? HearthColor.ember : HearthColor.borderSoft,
+                            lineWidth: selected ? 2 : 1)
+            )
+        }
+        .buttonStyle(.plain)
     }
 
     private var header: some View {

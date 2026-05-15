@@ -9,6 +9,12 @@ struct HearthApp: App {
     @State private var presence = PresenceMonitor()
     @State private var alerter = CaregiverAlerter()
     @State private var tts = HearthTTS()
+    // Theme name persisted via AppStorage. HearthColor reads from a
+    // global mutable palette (HearthColor.activePalette); SwiftUI does
+    // not track static-var reads, so we force a tree rebuild via .id()
+    // when the theme changes. The .onChange (with initial: true) also
+    // applies the persisted theme at launch.
+    @AppStorage("hearth.theme") private var themeName: String = "warm"
 
     var body: some Scene {
         WindowGroup {
@@ -20,6 +26,10 @@ struct HearthApp: App {
                 .environment(presence)
                 .environment(alerter)
                 .environment(tts)
+                .id(themeName)
+                .onChange(of: themeName, initial: true) { _, new in
+                    HearthColor.activePalette = HearthPalette.named(new)
+                }
                 .task { await gemma.prepareIfNeeded() }
         }
     }
