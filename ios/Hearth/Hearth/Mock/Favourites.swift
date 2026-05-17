@@ -19,6 +19,9 @@ enum Platforms {
     static let peacock     = StreamingPlatform(name: "Peacock",     shortName: "Peacock",  rokuAppId: 593099)
     static let paramount   = StreamingPlatform(name: "Paramount+",  shortName: "Paramount+", rokuAppId: 31440)
     static let appleTV     = StreamingPlatform(name: "Apple TV+",   shortName: "Apple TV+",  rokuAppId: 551012)
+    // Free 24/7 live news stream — no sign-in. Autoplays on launch, which is
+    // why we route "the news" here instead of Paramount+.
+    static let cbsNews     = StreamingPlatform(name: "CBS News",    shortName: "CBS News",   rokuAppId: 27536)
 }
 
 struct Show: Identifiable, Equatable {
@@ -144,7 +147,7 @@ enum FavouritesData {
              episode: "Tonight's broadcast",
              resume: "7 minutes in",
              imageName: "CBSEveningNews",
-             platform: Platforms.paramount),
+             platform: Platforms.cbsNews),
         Show(title: "Downton Abbey",
              episode: "Episode 4 — A new arrival",
              resume: "Start of episode",
