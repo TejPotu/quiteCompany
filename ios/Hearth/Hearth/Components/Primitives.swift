@@ -368,6 +368,9 @@ struct ContextStrip: View {
                         .foregroundStyle(HearthColor.ink)
                         .lineSpacing(2)
                         .fixedSize(horizontal: false, vertical: true)
+                        .contentTransition(.identity)
+                        .animation(nil, value: says)
+                        .id(says)
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -390,6 +393,9 @@ struct ContextStrip: View {
                     Text("\u{201C}\(heard)\u{201D}")
                         .font(HearthFont.serif(size: 22, weight: .regular).italic())
                         .foregroundStyle(HearthColor.inkSoft)
+                        .contentTransition(.identity)
+                        .animation(nil, value: heard)
+                        .id(heard)
                 }
             }
             .padding(.leading, 8)
