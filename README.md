@@ -205,6 +205,9 @@ she'll be here at six.*").
 
 ```
 ios/Hearth/                         iPad app — the canonical QuiteCompany
+  LITERTLM_iOS_INTEGRATION.md       hard-won gotchas for embedding Gemma 4
+                                    via LiteRTLM on iOS (read first if the
+                                    app crashes at launch)
   Hearth/
     HearthApp.swift                 app entry, wires up Observable services
     RootView.swift                  top bar + screen switch + bottom nav
@@ -290,6 +293,8 @@ Home / Watch / People / Reminders tabs in the bottom nav.
 
 ### Step 3 — Build the iPad app
 
+> **Read [`ios/Hearth/LITERTLM_iOS_INTEGRATION.md`](ios/Hearth/LITERTLM_iOS_INTEGRATION.md) first** if you are setting this up on a fresh machine or hitting a launch-time crash. It covers four LiteRTLM-Swift integration traps that each fail silently with a misleading diagnostic — nested-dylib re-signing + script sandbox, the `increased-memory-limit` entitlement, the v0.11.0 binary swap inside DerivedData, and audio backend wiring. Together they account for the first few hours of pain when embedding Gemma 4 via LiteRTLM into a new iOS app.
+
 ```sh
 open ios/Hearth/Hearth.xcodeproj
 ```
@@ -333,9 +338,10 @@ the Telegram setup sheet, send a test message. Done.
 
 | Symptom                                | Fix                                                                                          |
 | -------------------------------------- | -------------------------------------------------------------------------------------------- |
-| Xcode: "code signature invalid"        | The repo includes a post-build sign step for nested LiteRTLM dylibs. Clean (⇧⌘K) and rebuild. |
+| Xcode: "code signature invalid" / dyld crash at launch | Nested-dylib re-sign isn't running (or the script sandbox is blocking it). See [`LITERTLM_iOS_INTEGRATION.md`](ios/Hearth/LITERTLM_iOS_INTEGRATION.md) §1. |
 | Xcode: "no provisioning profile"       | Change the bundle identifier to something unique under your team.                            |
-| App: "Gemma error — out of memory"     | Older iPads don't have the NPU/memory. M1 iPad or newer is required.                         |
+| App: `litert_lm_engine_create returned NULL` | DerivedData was cleaned and the v0.11.0 binary swap got reverted. See [`LITERTLM_iOS_INTEGRATION.md`](ios/Hearth/LITERTLM_iOS_INTEGRATION.md) §3. |
+| App: "Gemma error — out of memory"     | Either the increased-memory entitlement is missing (see [`LITERTLM_iOS_INTEGRATION.md`](ios/Hearth/LITERTLM_iOS_INTEGRATION.md) §2) or the iPad is older than M1. Gemma 4 E2B needs the M-series NPU. |
 | App: "Roku unreachable"                | iPad and Roku must be on the same Wi-Fi subnet. Disable AP isolation on the router.          |
 | App: Telegram doesn't send             | Re-check bot token and chat id. Hit `/start` on the bot at least once from the caregiver side. |
 
