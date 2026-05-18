@@ -1,3 +1,0 @@
-- [Project: Hearth tablet for dementia](project_hearth.md) — companion tablet, dementia-first UX (not generic "human-friendly")
-- [Feedback: dementia-first UI bar](feedback_dementia_first.md) — strip anything that isn't essential for a dementia patient; bigger images, bigger names, fewer choices
-- [Project: Watch tab pain points](project_watch_pain_points.md) — nine real patient pain points the Watch tab must answer (platforms hidden, safe exit, resume, captions, focus, reassurance)

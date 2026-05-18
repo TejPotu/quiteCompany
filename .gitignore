@@ -4,6 +4,15 @@ dist
 *.log
 .vite
 
+# Claude Code workspace (private dev artifacts)
+.claude/
+memory/
+
+# Internal research / scratch
+TV List.pptx
+young_sheldon_episodes.json
+sidecar/
+
 # Xcode / iOS
 ios/Hearth/build/
 DerivedData/

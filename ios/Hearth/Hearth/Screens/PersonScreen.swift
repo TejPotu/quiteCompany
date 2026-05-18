@@ -122,12 +122,6 @@ struct PersonScreen: View {
                 showingCamera = true
             }
         }
-        .task {
-            // Seed is Gemma-independent in this pipeline (Apple Vision
-            // handles index-time fingerprinting; Gemma only runs at match
-            // time). Idempotent — safe to re-fire.
-            await store.seedFamousPeopleIfEmpty()
-        }
     }
 
     private var hearthSays: String {
