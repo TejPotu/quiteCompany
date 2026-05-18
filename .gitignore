@@ -3,3 +3,17 @@ dist
 .DS_Store
 *.log
 .vite
+
+# Xcode / iOS
+ios/Hearth/build/
+DerivedData/
+**/xcuserdata/
+**/*.xcuserstate
+**/*.xcuserdatad/
+.swiftpm/
+*.ipa
+*.dSYM.zip
+*.dSYM
+*.moved-aside
+young_sheldon_episode_links.docx
+Project Concept Package for Teja Potu.docx

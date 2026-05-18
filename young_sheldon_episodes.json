@@ -1,0 +1,853 @@
+{
+  "showTitle": "Young Sheldon",
+  "showNetflixId": "80192612",
+  "totalEpisodes": 141,
+  "episodes": [
+    {
+      "season": 1,
+      "episode": 1,
+      "title": "Pilot",
+      "netflixId": "80195333"
+    },
+    {
+      "season": 1,
+      "episode": 2,
+      "title": "Rockets, Communists, and the Dewey Decimal System",
+      "netflixId": "81498761"
+    },
+    {
+      "season": 1,
+      "episode": 3,
+      "title": "Poker, Faith, and Eggs",
+      "netflixId": "80195335"
+    },
+    {
+      "season": 1,
+      "episode": 4,
+      "title": "A Therapist, a Comic Book, and a Breakfast Sausage",
+      "netflixId": "80195336"
+    },
+    {
+      "season": 1,
+      "episode": 5,
+      "title": "A Solar Calculator, a Game Ball, and a Cheerleader's Bosom",
+      "netflixId": "80195337"
+    },
+    {
+      "season": 1,
+      "episode": 6,
+      "title": "A Patch, a Modem, and a Zantac",
+      "netflixId": "80195338"
+    },
+    {
+      "season": 1,
+      "episode": 7,
+      "title": "A Brisket, Voodoo, and Cannonball Run",
+      "netflixId": "80195339"
+    },
+    {
+      "season": 1,
+      "episode": 8,
+      "title": "Cape Canaveral, Schr\u00f6dinger's Cat, and Cyndi Lauper's Hair",
+      "netflixId": "80195340"
+    },
+    {
+      "season": 1,
+      "episode": 9,
+      "title": "Spock, Kirk, and Testicular Hernia",
+      "netflixId": "80195341"
+    },
+    {
+      "season": 1,
+      "episode": 10,
+      "title": "An Eagle Feather, a String Bean, and an Eskimo",
+      "netflixId": "80195342"
+    },
+    {
+      "season": 1,
+      "episode": 11,
+      "title": "Demons, Sunday School, and Prime Numbers",
+      "netflixId": "80195343"
+    },
+    {
+      "season": 1,
+      "episode": 12,
+      "title": "A Computer, a Plastic Pony, and a Case of Beer",
+      "netflixId": "80195344"
+    },
+    {
+      "season": 1,
+      "episode": 13,
+      "title": "A Sneeze, Detention, and Sissy Spacek",
+      "netflixId": "80195345"
+    },
+    {
+      "season": 1,
+      "episode": 14,
+      "title": "Potato Salad, a Broomstick, and Dad's Whiskey",
+      "netflixId": "80195346"
+    },
+    {
+      "season": 1,
+      "episode": 15,
+      "title": "Dolomite, Apple Slices, and a Mystery Woman",
+      "netflixId": "80195347"
+    },
+    {
+      "season": 1,
+      "episode": 16,
+      "title": "Killer Asteroids, Oklahoma, and a Frizzy Hair Machine",
+      "netflixId": "80195348"
+    },
+    {
+      "season": 1,
+      "episode": 17,
+      "title": "Jiu-Jitsu, Bubble Wrap, and Yoo-hoo",
+      "netflixId": "80195349"
+    },
+    {
+      "season": 1,
+      "episode": 18,
+      "title": "A Mother, A Child, and a Blue Man's Backside",
+      "netflixId": "80195350"
+    },
+    {
+      "season": 1,
+      "episode": 19,
+      "title": "Gluons, Guacamole, and the Color Purple",
+      "netflixId": "80195351"
+    },
+    {
+      "season": 1,
+      "episode": 20,
+      "title": "A Dog, a Squirrel, and a Fish Named Fish",
+      "netflixId": "80195352"
+    },
+    {
+      "season": 1,
+      "episode": 21,
+      "title": "Summer Sausage, a Pocket Poncho, and Tony Danza",
+      "netflixId": "80195353"
+    },
+    {
+      "season": 1,
+      "episode": 22,
+      "title": "Vanilla Ice Cream, Gentle Forster's, and a Little Ennio",
+      "netflixId": "80195354"
+    },
+    {
+      "season": 2,
+      "episode": 1,
+      "title": "A High-Pitched Buzz and Training Wheels",
+      "netflixId": "81023719"
+    },
+    {
+      "season": 2,
+      "episode": 2,
+      "title": "A Rival Prodigy and Sir Isaac Neutron",
+      "netflixId": "81023720"
+    },
+    {
+      "season": 2,
+      "episode": 3,
+      "title": "A Crisis of Faith and Octopus Aliens",
+      "netflixId": "81023721"
+    },
+    {
+      "season": 2,
+      "episode": 4,
+      "title": "A Financial Secret and Fish Sauce",
+      "netflixId": "81023722"
+    },
+    {
+      "season": 2,
+      "episode": 5,
+      "title": "A Research Study and Czechoslovakian Wedding Pastries",
+      "netflixId": "81023723"
+    },
+    {
+      "season": 2,
+      "episode": 6,
+      "title": "Seven Deadly Sins and a Small Carl Sagan",
+      "netflixId": "81023724"
+    },
+    {
+      "season": 2,
+      "episode": 7,
+      "title": "Carbon Dating and a Pop-Up Toy",
+      "netflixId": "81023725"
+    },
+    {
+      "season": 2,
+      "episode": 8,
+      "title": "An 8-Bit Princess and a Flat Tire Genius",
+      "netflixId": "81023726"
+    },
+    {
+      "season": 2,
+      "episode": 9,
+      "title": "Family Dynamics and a Red Fiero",
+      "netflixId": "81023727"
+    },
+    {
+      "season": 2,
+      "episode": 10,
+      "title": "A Stunted Childhood and a Can of Fancy Mixed Nuts",
+      "netflixId": "81023728"
+    },
+    {
+      "season": 2,
+      "episode": 11,
+      "title": "A Race of Superhumans and a Letter to Alf",
+      "netflixId": "81023729"
+    },
+    {
+      "season": 2,
+      "episode": 12,
+      "title": "A Tummy Ache and a Whale of a Metaphor",
+      "netflixId": "81023730"
+    },
+    {
+      "season": 2,
+      "episode": 13,
+      "title": "A Nuclear Reactor and a Boy Called Lovey",
+      "netflixId": "81023731"
+    },
+    {
+      "season": 2,
+      "episode": 14,
+      "title": "David, Goliath, and a Yoo-hoo from the Back",
+      "netflixId": "81023732"
+    },
+    {
+      "season": 2,
+      "episode": 15,
+      "title": "A Math Emergency and as Many Finger Puppets as You Can Make",
+      "netflixId": "81023733"
+    },
+    {
+      "season": 2,
+      "episode": 16,
+      "title": "A Loaf of Bread and a Grand Old Flag",
+      "netflixId": "81023734"
+    },
+    {
+      "season": 2,
+      "episode": 17,
+      "title": "Albert Einstein and the Story of Another Mary",
+      "netflixId": "81023735"
+    },
+    {
+      "season": 2,
+      "episode": 18,
+      "title": "A Perfect Score and a Bunsen Burner Marshmallow",
+      "netflixId": "81023736"
+    },
+    {
+      "season": 2,
+      "episode": 19,
+      "title": "A Politician, a Purity Pledge and a Venus Flytrap",
+      "netflixId": "81023737"
+    },
+    {
+      "season": 2,
+      "episode": 20,
+      "title": "A Proposal and a Spare Cross",
+      "netflixId": "81023738"
+    },
+    {
+      "season": 2,
+      "episode": 21,
+      "title": "A Broken Heart and a Crock Monster",
+      "netflixId": "81023739"
+    },
+    {
+      "season": 2,
+      "episode": 22,
+      "title": "A Swedish Science Thing and the Equation for Toast",
+      "netflixId": "81023740"
+    },
+    {
+      "season": 3,
+      "episode": 1,
+      "title": "Quirky Eggheads and Texas Snow Globes",
+      "netflixId": "81192801"
+    },
+    {
+      "season": 3,
+      "episode": 2,
+      "title": "A Broom Closet and Satan's Monopoly Board",
+      "netflixId": "81192802"
+    },
+    {
+      "season": 3,
+      "episode": 3,
+      "title": "An Entrepreneurialist and a Swat on the Bottom",
+      "netflixId": "81192803"
+    },
+    {
+      "season": 3,
+      "episode": 4,
+      "title": "Hobbitses, Physicses and a Ball with Zip",
+      "netflixId": "81192804"
+    },
+    {
+      "season": 3,
+      "episode": 5,
+      "title": "A Pineapple and the Bosom of Male Befuddlement",
+      "netflixId": "81192805"
+    },
+    {
+      "season": 3,
+      "episode": 6,
+      "title": "A Parasol and a Whole Lot of Armadillo",
+      "netflixId": "81192806"
+    },
+    {
+      "season": 3,
+      "episode": 7,
+      "title": "Pongo Pygmaeus and a Culture that Encourages Spitting",
+      "netflixId": "81192807"
+    },
+    {
+      "season": 3,
+      "episode": 8,
+      "title": "The Sin of Greed and a Chimichanga from Chi-Chi's",
+      "netflixId": "81192808"
+    },
+    {
+      "season": 3,
+      "episode": 9,
+      "title": "A Party Invitation, Football Grapes and Earthly Delight",
+      "netflixId": "81192809"
+    },
+    {
+      "season": 3,
+      "episode": 10,
+      "title": "Teenager Soup and a Little Ball of Fib",
+      "netflixId": "81192810"
+    },
+    {
+      "season": 3,
+      "episode": 11,
+      "title": "A Live Chicken, a Ribald Pair and a Big Mirror",
+      "netflixId": "81192811"
+    },
+    {
+      "season": 3,
+      "episode": 12,
+      "title": "Body Glitter and a Mall Safety Snack",
+      "netflixId": "81192812"
+    },
+    {
+      "season": 3,
+      "episode": 13,
+      "title": "Contracts, Exterminators and a Baby Owl",
+      "netflixId": "81192813"
+    },
+    {
+      "season": 3,
+      "episode": 14,
+      "title": "A Slumber Party, a Venerable Tortoise and a Happy Emotion",
+      "netflixId": "81192814"
+    },
+    {
+      "season": 3,
+      "episode": 15,
+      "title": "A Baby Tooth and the Egyptian God of Knowledge",
+      "netflixId": "81192815"
+    },
+    {
+      "season": 3,
+      "episode": 16,
+      "title": "Pasadena",
+      "netflixId": "81192816"
+    },
+    {
+      "season": 3,
+      "episode": 17,
+      "title": "An Academic Crime and a More Comfortable Chair",
+      "netflixId": "81192817"
+    },
+    {
+      "season": 3,
+      "episode": 18,
+      "title": "A Couple Bruised Ribs and a Ghost Detector",
+      "netflixId": "81192818"
+    },
+    {
+      "season": 3,
+      "episode": 19,
+      "title": "A House for Sale and Serious Woman Stuff",
+      "netflixId": "81192819"
+    },
+    {
+      "season": 3,
+      "episode": 20,
+      "title": "A Baby Step and a Mishap with a Beaver",
+      "netflixId": "81192820"
+    },
+    {
+      "season": 3,
+      "episode": 21,
+      "title": "A Secret Letter and a Lowly Disc of Processed Meat",
+      "netflixId": "81192821"
+    },
+    {
+      "season": 4,
+      "episode": 1,
+      "title": "Graduation",
+      "netflixId": "81329241"
+    },
+    {
+      "season": 4,
+      "episode": 2,
+      "title": "A Docent, A Little Lady and a Bouncer Named Dalton",
+      "netflixId": "81329242"
+    },
+    {
+      "season": 4,
+      "episode": 3,
+      "title": "Training Wheels and an Unleashed Chicken",
+      "netflixId": "81329243"
+    },
+    {
+      "season": 4,
+      "episode": 4,
+      "title": "Bible Camp and a Hot Dog War",
+      "netflixId": "81329244"
+    },
+    {
+      "season": 4,
+      "episode": 5,
+      "title": "A Musty Crypt and a Stick to Pee On",
+      "netflixId": "81329245"
+    },
+    {
+      "season": 4,
+      "episode": 6,
+      "title": "Freshman Orientation and the Inventor of the Zipper",
+      "netflixId": "81329246"
+    },
+    {
+      "season": 4,
+      "episode": 7,
+      "title": "A Philosophy Class and Worms that Can Chase You",
+      "netflixId": "81329247"
+    },
+    {
+      "season": 4,
+      "episode": 8,
+      "title": "An Existential Crisis and a Bear that Makes Bubbles",
+      "netflixId": "81329248"
+    },
+    {
+      "season": 4,
+      "episode": 9,
+      "title": "Crappy Frozen Ice Cream and an Organ Grinder's Monkey",
+      "netflixId": "81329249"
+    },
+    {
+      "season": 4,
+      "episode": 10,
+      "title": "Cowboy Aerobics and 473 Grease-Free Bolts",
+      "netflixId": "81329250"
+    },
+    {
+      "season": 4,
+      "episode": 11,
+      "title": "A Pager, a Club and a Cranky Bag of Wrinkles",
+      "netflixId": "81329251"
+    },
+    {
+      "season": 4,
+      "episode": 12,
+      "title": "A Box of Treasure and the Meemaw of Science",
+      "netflixId": "81329252"
+    },
+    {
+      "season": 4,
+      "episode": 13,
+      "title": "The Geezer Bus and a New Model for Education",
+      "netflixId": "81329253"
+    },
+    {
+      "season": 4,
+      "episode": 14,
+      "title": "Mitch's Son and the Unconditional Approval of a Government Agency",
+      "netflixId": "81329254"
+    },
+    {
+      "season": 4,
+      "episode": 15,
+      "title": "A Virus, a Heartbreak and a World of Possibilities",
+      "netflixId": "81329255"
+    },
+    {
+      "season": 4,
+      "episode": 16,
+      "title": "A Second Prodigy and the Hottest Tips for Pouty Lips",
+      "netflixId": "81329256"
+    },
+    {
+      "season": 4,
+      "episode": 17,
+      "title": "A Black Hole",
+      "netflixId": "81329257"
+    },
+    {
+      "season": 4,
+      "episode": 18,
+      "title": "The Wild and Woolly World of Nonlinear Dynamics",
+      "netflixId": "81329258"
+    },
+    {
+      "season": 5,
+      "episode": 1,
+      "title": "One Bad Night and Chaos of Selfish Desires",
+      "netflixId": "81498061"
+    },
+    {
+      "season": 5,
+      "episode": 2,
+      "title": "Snoopin' Around and the Wonder Twins of Atheism",
+      "netflixId": "81498062"
+    },
+    {
+      "season": 5,
+      "episode": 3,
+      "title": "Potential Energy and the Hooch on a Shelf",
+      "netflixId": "81498063"
+    },
+    {
+      "season": 5,
+      "episode": 4,
+      "title": "Pish Posh and a Secret Back Room",
+      "netflixId": "81498064"
+    },
+    {
+      "season": 5,
+      "episode": 5,
+      "title": "Stuffed Animals and a Sweet Southern Syzygy",
+      "netflixId": "81498065"
+    },
+    {
+      "season": 5,
+      "episode": 6,
+      "title": "Money Laundering and a Cascade of Errors",
+      "netflixId": "81498066"
+    },
+    {
+      "season": 5,
+      "episode": 7,
+      "title": "An Introduction to Engineering and a Glob of Hair Dye",
+      "netflixId": "81498067"
+    },
+    {
+      "season": 5,
+      "episode": 8,
+      "title": "The Grandview Grand-Daddy of All Road Trips",
+      "netflixId": "81498068"
+    },
+    {
+      "season": 5,
+      "episode": 9,
+      "title": "The Yips and an Oddly Spry 75-Year-Old",
+      "netflixId": "81498069"
+    },
+    {
+      "season": 5,
+      "episode": 10,
+      "title": "An Expensive Glitch and a Goof-Off Room",
+      "netflixId": "81498070"
+    },
+    {
+      "season": 5,
+      "episode": 11,
+      "title": "A Lockbox, a Night Light and a Mid-Century Modern Lamp",
+      "netflixId": "81498071"
+    },
+    {
+      "season": 5,
+      "episode": 12,
+      "title": "A Pink Cadillac and a Glorious Tribal Dance",
+      "netflixId": "81498072"
+    },
+    {
+      "season": 5,
+      "episode": 13,
+      "title": "A Lot of Ratatouille and the Terrible 10-Year-Old",
+      "netflixId": "81498073"
+    },
+    {
+      "season": 5,
+      "episode": 14,
+      "title": "A Free Scratcher and Feminine Wiles",
+      "netflixId": "81498074"
+    },
+    {
+      "season": 5,
+      "episode": 15,
+      "title": "A Lobster, an Armadillo and a Way Bigger Number",
+      "netflixId": "81498075"
+    },
+    {
+      "season": 5,
+      "episode": 16,
+      "title": "A Suitcase Full of Cash and a Yellow Clown Car",
+      "netflixId": "81498076"
+    },
+    {
+      "season": 5,
+      "episode": 17,
+      "title": "A Soloist, a Postcard and a Day to Be Barefoot",
+      "netflixId": "81498077"
+    },
+    {
+      "season": 5,
+      "episode": 18,
+      "title": "Babies, Lies and a Resplendent Cannoli",
+      "netflixId": "81498078"
+    },
+    {
+      "season": 5,
+      "episode": 19,
+      "title": "A Baptist Blessing and a Hot Tub of Sin",
+      "netflixId": "81498079"
+    },
+    {
+      "season": 5,
+      "episode": 20,
+      "title": "Uncle Sheldon and a Hormonal Firecracker",
+      "netflixId": "81498080"
+    },
+    {
+      "season": 5,
+      "episode": 21,
+      "title": "White Trash, Holy Rollers and Punching People",
+      "netflixId": "81498081"
+    },
+    {
+      "season": 5,
+      "episode": 22,
+      "title": "A Clogged Pore, a Little Spanish and the Future",
+      "netflixId": "81498082"
+    },
+    {
+      "season": 6,
+      "episode": 1,
+      "title": "Four Hundred Cartons of Undeclared Cigarettes and a Niblingo",
+      "netflixId": "81622341"
+    },
+    {
+      "season": 6,
+      "episode": 2,
+      "title": "Future Worshippers and a Chocolate Bar Strategy",
+      "netflixId": "81622342"
+    },
+    {
+      "season": 6,
+      "episode": 3,
+      "title": "Passion's Harvest and a Sheldocracy",
+      "netflixId": "81622343"
+    },
+    {
+      "season": 6,
+      "episode": 4,
+      "title": "Blonde Ambition and the Concept of Zero",
+      "netflixId": "81622344"
+    },
+    {
+      "season": 6,
+      "episode": 5,
+      "title": "A Resident Advisor and the Word Sketchy",
+      "netflixId": "81622345"
+    },
+    {
+      "season": 6,
+      "episode": 6,
+      "title": "An Ugly Car, an Affair and Some Grand-Pere",
+      "netflixId": "81622346"
+    },
+    {
+      "season": 6,
+      "episode": 7,
+      "title": "A Tougher Nut to Crack and a Ginkgo Biloba Menace",
+      "netflixId": "81622347"
+    },
+    {
+      "season": 6,
+      "episode": 8,
+      "title": "Legalese and a Whole Hoo-Ha",
+      "netflixId": "81622348"
+    },
+    {
+      "season": 6,
+      "episode": 9,
+      "title": "College Drop-Outs and the Medford Miracle",
+      "netflixId": "81622349"
+    },
+    {
+      "season": 6,
+      "episode": 10,
+      "title": "Pancake Sunday and a Whole Lot of Fuzz",
+      "netflixId": "81622350"
+    },
+    {
+      "season": 6,
+      "episode": 11,
+      "title": "Ruthless, Toothless, and a Week of Bed Rest",
+      "netflixId": "81622351"
+    },
+    {
+      "season": 6,
+      "episode": 12,
+      "title": "A Baby Shower and a Testosterone-Rich Banter",
+      "netflixId": "81622352"
+    },
+    {
+      "season": 6,
+      "episode": 13,
+      "title": "A Frat Party, a Sleepover and the Mother of All Blisters",
+      "netflixId": "81622353"
+    },
+    {
+      "season": 6,
+      "episode": 14,
+      "title": "A Launch Party and a Whole Human Being",
+      "netflixId": "81622354"
+    },
+    {
+      "season": 6,
+      "episode": 15,
+      "title": "Teen Angst and a Smart-Boy Walk of Shame",
+      "netflixId": "81622355"
+    },
+    {
+      "season": 6,
+      "episode": 16,
+      "title": "A Stolen Truck and Going on the Lam",
+      "netflixId": "81622356"
+    },
+    {
+      "season": 6,
+      "episode": 17,
+      "title": "A German Folk Song and an Actual Adult",
+      "netflixId": "81622357"
+    },
+    {
+      "season": 6,
+      "episode": 18,
+      "title": "Little Green Men and a Fellows Sip and Puff",
+      "netflixId": "81622358"
+    },
+    {
+      "season": 6,
+      "episode": 19,
+      "title": "A New Weather Girl and a Stay-at-Home Coddler",
+      "netflixId": "81622359"
+    },
+    {
+      "season": 6,
+      "episode": 20,
+      "title": "German for Beginners and a Crazy Old Man with a Cane",
+      "netflixId": "81622360"
+    },
+    {
+      "season": 6,
+      "episode": 21,
+      "title": "A Romantic Getaway and a Germanic Meat Whoosh",
+      "netflixId": "81622361"
+    },
+    {
+      "season": 6,
+      "episode": 22,
+      "title": "A Tornado, a 10-Hour Flight and a Damn Fine Cup of Coffee",
+      "netflixId": "81622362"
+    },
+    {
+      "season": 7,
+      "episode": 1,
+      "title": "Half a Wiener Schnitzel and Underwear in a Tree",
+      "netflixId": "81734261"
+    },
+    {
+      "season": 7,
+      "episode": 2,
+      "title": "A Roulette Wheel and a Piano Playing Dog",
+      "netflixId": "81734262"
+    },
+    {
+      "season": 7,
+      "episode": 3,
+      "title": "A Strudel and a Hot American Boy Toy",
+      "netflixId": "81734263"
+    },
+    {
+      "season": 7,
+      "episode": 4,
+      "title": "Ants on a Log and a Cheerleader Hi-Five",
+      "netflixId": "81734264"
+    },
+    {
+      "season": 7,
+      "episode": 5,
+      "title": "A Frankenstein's Monster and a Crazy Church Guy",
+      "netflixId": "81734265"
+    },
+    {
+      "season": 7,
+      "episode": 6,
+      "title": "Baptists, Catholics and an Attempted Drowning",
+      "netflixId": "81734266"
+    },
+    {
+      "season": 7,
+      "episode": 7,
+      "title": "A Proper Wedding and Skeletons in the Closet",
+      "netflixId": "81734267"
+    },
+    {
+      "season": 7,
+      "episode": 8,
+      "title": "An Ankle Monitor and a Big Plastichead",
+      "netflixId": "81734268"
+    },
+    {
+      "season": 7,
+      "episode": 9,
+      "title": "A Fancy Article and a Scholarship for a Baby",
+      "netflixId": "81734269"
+    },
+    {
+      "season": 7,
+      "episode": 10,
+      "title": "Community Service and the Key to a Happy Marriage",
+      "netflixId": "81734270"
+    },
+    {
+      "season": 7,
+      "episode": 11,
+      "title": "A Little Snip and Teaching Old Dogs New Tricks",
+      "netflixId": "81734271"
+    },
+    {
+      "season": 7,
+      "episode": 12,
+      "title": "A New Home and a Traditional Texas Torture",
+      "netflixId": "81734272"
+    },
+    {
+      "season": 7,
+      "episode": 13,
+      "title": "Funeral",
+      "netflixId": "81734273"
+    },
+    {
+      "season": 7,
+      "episode": 14,
+      "title": "Memoir",
+      "netflixId": "81734274"
+    }
+  ]
+}
