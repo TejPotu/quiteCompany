@@ -42,20 +42,6 @@ doesn't ship.
 
 ---
 
-## Screenshots
-
-| Watch — show-centric remote | People — face recognition | Cues — caregiver knowledge |
-| :---: | :---: | :---: |
-| ![Watch tab](docs/screenshots/watch.png) | ![People tab](docs/screenshots/people.png) | ![Cues tab](docs/screenshots/cues.png) |
-| **Voice — tap-to-talk** | **Wellness — setup** | **Caregiver — Telegram alert** |
-| ![Voice control](docs/screenshots/watch-voice.png) | ![Wellness sheet](docs/screenshots/wellness.png) | ![Telegram alert](docs/screenshots/telegram-alert.png) |
-
-The web prototype that prefigures the iPad UX:
-
-![Web prototype — Home](docs/screenshots/web-home.png)
-
----
-
 ## What's in the box
 
 QuiteCompany is the **iPad app** ([`ios/Hearth`](ios/Hearth/)). There are three
