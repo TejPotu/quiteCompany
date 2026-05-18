@@ -1,15 +1,16 @@
-# Hearth
+# QuiteCompany
 
 **A calm, on-device companion iPad for people living with dementia.**
 
-Hearth helps a person with mild-to-moderate dementia do three small things on their own
-that the disease quietly takes away: **watch the shows they love**, **recognise the people
-who visit them**, and **answer the everyday questions** ("Did I take my medicine?",
-"Where is Sarah?", "What day is it?") without having to ask a caregiver every time.
+QuiteCompany helps a person with mild-to-moderate dementia do three small things on
+their own that the disease quietly takes away: **watch the shows they love**,
+**recognise the people who visit them**, and **answer the everyday questions** ("Did I
+take my medicine?", "Where is Sarah?", "What day is it?") without having to ask a
+caregiver every time.
 
-Every model call runs **on-device with Gemma 3n via LiteRTLM** — no cloud, no audio
-leaving the iPad, no subscription. The device works the same in a care home with no
-internet as it does on a kitchen table.
+Every model call runs **on-device with Gemma 4 (E2B) via LiteRTLM** — no cloud, no
+audio leaving the iPad, no subscription. The device works the same in a care home with
+no internet as it does on a kitchen table.
 
 > Submission for the **Kaggle Gemma 4 Good** hackathon
 > ([kaggle.com/competitions/gemma-4-good-hackathon](https://www.kaggle.com/competitions/gemma-4-good-hackathon)).
@@ -22,7 +23,7 @@ We interviewed family caregivers and observed real patients. The pain points are
 remarkably consistent — and almost none of them are solved by a "smarter assistant."
 They're solved by **removing choice, hiding logistics, and using human language.**
 
-| Pain point we heard                                                  | What Hearth does                                                |
+| Pain point we heard                                                  | What QuiteCompany does                                          |
 | -------------------------------------------------------------------- | --------------------------------------------------------------- |
 | "He can't remember if Father Brown is on Hulu or BBC."               | Patient never sees a platform. One tile per show, ever.         |
 | "She gets stuck inside a show and panics."                           | A plain "Stop watching" button. Always there. Same place.       |
@@ -30,7 +31,7 @@ They're solved by **removing choice, hiding logistics, and using human language.
 | "She can't tell which thing on screen is selected."                  | Outline + badge + scale + dim the rest. Redundant focus cues.   |
 | "The remote says 'rewind 30 seconds'. That's not how she thinks."    | "Go back a little." "I missed that." Human time.                |
 | "He asks 'who is this?' when our daughter walks in."                 | One photo, one name, one relationship. Plus shared memories.    |
-| "I get a call at 2am: 'where are my pills?'"                         | Caregiver writes a Cue once. Hearth answers, in plain prose.    |
+| "I get a call at 2am: 'where are my pills?'"                         | Caregiver writes a Cue once. QuiteCompany answers in plain prose. |
 | "I want to know if Dad's been sitting alone all afternoon."          | Periodic on-device presence check. Telegram ping if too long.   |
 
 The brief that runs through the whole codebase: *bigger, fewer, clearer.* If a feature
@@ -40,25 +41,27 @@ helps a typical user but adds cognitive load for a dementia patient, it doesn't 
 
 ## What's in the box
 
-Hearth is the **iPad app** ([`ios/Hearth`](ios/Hearth/)). There are three screens, and
-they exist because they each solve one of the three things above.
+QuiteCompany is the **iPad app** ([`ios/Hearth`](ios/Hearth/)). There are three
+screens, and they exist because they each solve one of the three things above.
 
 ### Watch — the show-centric TV remote
 
-Hearth talks to a Roku TV over the LAN (no cables, no account linking). The patient sees
-their six favourite shows. They tap one — Hearth launches it on the TV, narrates "*Putting
-on Antiques Roadshow. You're twelve minutes in.*", and stays as a friendly remote.
+QuiteCompany talks to a Roku TV over the LAN (no cables, no account linking). The
+patient sees their six favourite shows. They tap one — QuiteCompany launches it on the
+TV, narrates "*Putting on Antiques Roadshow. You're twelve minutes in.*", and stays as
+a friendly remote.
 
-There is also a **tap-to-talk** button. The mic captures 16 kHz mono PCM, Gemma 3n's
-audio path transcribes it, and the *same* Gemma session plans the action through a tiny
-tool-calling DSL ([RokuToolKit.swift](ios/Hearth/Hearth/Services/RokuToolKit.swift)).
-"Put on Coronation Street" → `roku.launch("Coronation Street")` + a one-sentence
-spoken reply. "Where is my daughter?" → consult the Cues catalog, answer in prose.
+There is also a **tap-to-talk** button. The mic captures 16 kHz mono PCM, Gemma 4's
+audio path transcribes it, and the *same* Gemma session plans the action through a
+tiny tool-calling DSL
+([RokuToolKit.swift](ios/Hearth/Hearth/Services/RokuToolKit.swift)). "Put on
+Coronation Street" → `roku.launch("Coronation Street")` + a one-sentence spoken reply.
+"Where is my daughter?" → consult the Cues catalog, answer in prose.
 
 ### People — face recognition with shared memory
 
 Front camera takes one still. Apple Vision computes a face print and returns a ranked
-shortlist of 3 candidates in ~10 ms. **Gemma 3n's vision path** then re-ranks
+shortlist of 3 candidates in ~10 ms. **Gemma 4's vision path** then re-ranks
 pairwise — the cheap math narrows the field, the model decides identity. The result
 card is deliberately minimal: portrait, name, relationship, where they're from, and a
 strip of shared photos. **No bio paragraphs, no factoid stacks.**
@@ -75,11 +78,13 @@ time-sensitive cues the patient can ask about in their own words.
 
 ### Wellness — the caregiver loop
 
-While the iPad is on the table, [PresenceMonitor.swift](ios/Hearth/Hearth/Services/PresenceMonitor.swift)
-samples the front camera every few minutes and asks Gemma "is a person visible?". If
-the answer has been *no* for longer than a threshold, [CaregiverAlerter.swift](ios/Hearth/Hearth/Services/CaregiverAlerter.swift)
-pings the caregiver on Telegram. Telegram, not SMS or email, because it's free,
-reliable, cross-platform, and rings as a push notification.
+While the iPad is on the table,
+[PresenceMonitor.swift](ios/Hearth/Hearth/Services/PresenceMonitor.swift) samples the
+front camera every few minutes and asks Gemma "is a person visible?". If the answer
+has been *no* for longer than a threshold,
+[CaregiverAlerter.swift](ios/Hearth/Hearth/Services/CaregiverAlerter.swift) pings the
+caregiver on Telegram. Telegram, not SMS or email, because it's free, reliable,
+cross-platform, and rings as a push notification.
 
 ---
 
@@ -104,7 +109,7 @@ flowchart TB
             CAM["📷 CameraTap<br/>single still JPEG"]
         end
 
-        subgraph BRAIN["🧠 Gemma 3n via LiteRTLM"]
+        subgraph BRAIN["🧠 Gemma 4 (E2B) via LiteRTLM"]
             GAUDIO["audio → text<br/>ASR"]
             GTEXT["text → plan<br/>tool calls + narration"]
             GVISION["vision → identity<br/>face re-rank, presence"]
@@ -177,14 +182,14 @@ flowchart TB
 7. `HearthTTS` reads the narration aloud while the TV starts the show.
 
 The same plumbing answers *"where is my daughter?"* — only the parser sees no tool
-calls and the narration comes from a matching cue ("*Sarah is at work today, she'll be
-here at six.*").
+calls and the narration comes from a matching cue ("*Sarah is at work today, she'll
+be here at six.*").
 
 ### Why this split
 
 | Decision                                  | Reason                                                                                       |
 | ----------------------------------------- | -------------------------------------------------------------------------------------------- |
-| Gemma 3n via LiteRTLM, fully on-device    | Patient audio never leaves the iPad. Works with no internet. Zero per-call cost.             |
+| Gemma 4 (E2B) via LiteRTLM, fully on-device | Patient audio never leaves the iPad. Works with no internet. Zero per-call cost.           |
 | Vision shortlist → Gemma vision re-rank   | Vision is ~1 ms, Gemma vision is ~1–2 s. Use cheap math for narrowing, Gemma for deciding.   |
 | Two-step audio: ASR, *then* text routing  | The audio model is great at ASR alone but defaults to greetings when also asked to route.    |
 | Line-based DSL for tool calls             | Small models follow simple grammars more reliably than JSON.                                 |
@@ -196,7 +201,7 @@ here at six.*").
 ## Repository layout
 
 ```
-ios/Hearth/                         iPad app — the canonical Hearth
+ios/Hearth/                         iPad app — the canonical QuiteCompany
   Hearth/
     HearthApp.swift                 app entry, wires up Observable services
     RootView.swift                  top bar + screen switch + bottom nav
@@ -205,7 +210,7 @@ ios/Hearth/                         iPad app — the canonical Hearth
       PersonScreen.swift            camera viewfinder + recognised person
       CuesScreen.swift              caregiver indexing of standing cues
     Services/
-      HearthGemma.swift             Gemma 3n via LiteRTLM — text · audio · vision
+      HearthGemma.swift             Gemma 4 (E2B) via LiteRTLM — text · audio · vision
       RokuController.swift          ECP client (LAN HTTP on port 8060)
       RokuToolKit.swift             tool catalog + plan parser + executor
       FaceMatcher.swift             Vision feature-prints + Gemma re-rank
@@ -232,6 +237,10 @@ reference/hearth-tablet-prototype.html   the original artifact — design truth
 backend/roku_ecp_test.ipynb              Roku ECP exploration notebook
 ```
 
+> Internal Swift identifiers (`HearthGemma`, `HearthApp`, `HearthColor`, …) keep the
+> codename **Hearth** that the project was built under. The shipped product brand is
+> **QuiteCompany**.
+
 ---
 
 ## Run it
@@ -252,11 +261,11 @@ dementia-first UI patterns without an iPad or a Roku.
 open ios/Hearth/Hearth.xcodeproj
 ```
 
-Build to a physical iPad (Gemma 3n needs the Neural Engine). On first launch:
+Build to a physical iPad (Gemma 4 E2B needs the Neural Engine). On first launch:
 
-1. Wellness sheet → **Download Gemma** (one-time, runs LiteRTLM model download).
-2. Roku sheet → enter the TV's LAN IP (the Roku settings screen shows it). Hearth
-   probes ECP and flips to ready.
+1. Wellness sheet → **Download Gemma** (one-time, ~2.6 GB via LiteRTLM).
+2. Roku sheet → enter the TV's LAN IP (the Roku settings screen shows it).
+   QuiteCompany probes ECP and flips to ready.
 3. Telegram sheet *(optional)* → paste the bot token and chat id from
    [`CaregiverAlerter.swift`](ios/Hearth/Hearth/Services/CaregiverAlerter.swift)'s
    header comment.
@@ -268,8 +277,8 @@ patient-facing path uses is LAN traffic to the Roku.
 
 ## Privacy
 
-- Audio: recorded → transcribed on-device → discarded. Never written to disk, never sent
-  off-device.
+- Audio: recorded → transcribed on-device → discarded. Never written to disk, never
+  sent off-device.
 - Camera: single stills only. The iOS green privacy indicator blinks every sample.
   Frames are passed to Gemma vision in-memory and dropped.
 - People: caregiver-indexed portraits and their face prints live in app storage.
@@ -280,11 +289,13 @@ patient-facing path uses is LAN traffic to the Roku.
 
 ## Credits & licensing
 
-- **Gemma 3n** — Google. Run on-device via **LiteRTLMSwift**.
+- **Gemma 4 (E2B)** — Google. Run on-device via **LiteRTLMSwift**.
 - **Apple Vision** — `VNFeaturePrintObservation` for face fingerprints.
 - **Phosphor Icons** — used in the web prototype.
 - **Atkinson Hyperlegible** + **Newsreader** — typefaces optimised for low-vision
   readability.
+
+Released under the **MIT License** — see [LICENSE](LICENSE).
 
 Built for [Gemma 4 Good](https://www.kaggle.com/competitions/gemma-4-good-hackathon) —
 a humanitarian application of small-model on-device AI.
