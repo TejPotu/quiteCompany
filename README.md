@@ -1,36 +1,290 @@
-# Hearth — Tablet
+# Hearth
 
-A companion tablet for people living with dementia. Show-centric TV remote,
-person recognition with shared memories, relationship-based calling,
-plain-language reminders. On-device inference (Gemma) is the eventual
-target; this repo is the UI prototype.
+**A calm, on-device companion iPad for people living with dementia.**
 
-## Run
+Hearth helps a person with mild-to-moderate dementia do three small things on their own
+that the disease quietly takes away: **watch the shows they love**, **recognise the people
+who visit them**, and **answer the everyday questions** ("Did I take my medicine?",
+"Where is Sarah?", "What day is it?") without having to ask a caregiver every time.
+
+Every model call runs **on-device with Gemma 3n via LiteRTLM** — no cloud, no audio
+leaving the iPad, no subscription. The device works the same in a care home with no
+internet as it does on a kitchen table.
+
+> Submission for the **Kaggle Gemma 4 Good** hackathon
+> ([kaggle.com/competitions/gemma-4-good-hackathon](https://www.kaggle.com/competitions/gemma-4-good-hackathon)).
+
+---
+
+## Why this exists
+
+We interviewed family caregivers and observed real patients. The pain points are
+remarkably consistent — and almost none of them are solved by a "smarter assistant."
+They're solved by **removing choice, hiding logistics, and using human language.**
+
+| Pain point we heard                                                  | What Hearth does                                                |
+| -------------------------------------------------------------------- | --------------------------------------------------------------- |
+| "He can't remember if Father Brown is on Hulu or BBC."               | Patient never sees a platform. One tile per show, ever.         |
+| "She gets stuck inside a show and panics."                           | A plain "Stop watching" button. Always there. Same place.       |
+| "He restarts the same episode three times — he thinks it's lost."    | Every tile says *Always here* and shows where you left off.     |
+| "She can't tell which thing on screen is selected."                  | Outline + badge + scale + dim the rest. Redundant focus cues.   |
+| "The remote says 'rewind 30 seconds'. That's not how she thinks."    | "Go back a little." "I missed that." Human time.                |
+| "He asks 'who is this?' when our daughter walks in."                 | One photo, one name, one relationship. Plus shared memories.    |
+| "I get a call at 2am: 'where are my pills?'"                         | Caregiver writes a Cue once. Hearth answers, in plain prose.    |
+| "I want to know if Dad's been sitting alone all afternoon."          | Periodic on-device presence check. Telegram ping if too long.   |
+
+The brief that runs through the whole codebase: *bigger, fewer, clearer.* If a feature
+helps a typical user but adds cognitive load for a dementia patient, it doesn't ship.
+
+---
+
+## What's in the box
+
+Hearth is the **iPad app** ([`ios/Hearth`](ios/Hearth/)). There are three screens, and
+they exist because they each solve one of the three things above.
+
+### Watch — the show-centric TV remote
+
+Hearth talks to a Roku TV over the LAN (no cables, no account linking). The patient sees
+their six favourite shows. They tap one — Hearth launches it on the TV, narrates "*Putting
+on Antiques Roadshow. You're twelve minutes in.*", and stays as a friendly remote.
+
+There is also a **tap-to-talk** button. The mic captures 16 kHz mono PCM, Gemma 3n's
+audio path transcribes it, and the *same* Gemma session plans the action through a tiny
+tool-calling DSL ([RokuToolKit.swift](ios/Hearth/Hearth/Services/RokuToolKit.swift)).
+"Put on Coronation Street" → `roku.launch("Coronation Street")` + a one-sentence
+spoken reply. "Where is my daughter?" → consult the Cues catalog, answer in prose.
+
+### People — face recognition with shared memory
+
+Front camera takes one still. Apple Vision computes a face print and returns a ranked
+shortlist of 3 candidates in ~10 ms. **Gemma 3n's vision path** then re-ranks
+pairwise — the cheap math narrows the field, the model decides identity. The result
+card is deliberately minimal: portrait, name, relationship, where they're from, and a
+strip of shared photos. **No bio paragraphs, no factoid stacks.**
+
+### Cues — what Gemma knows about *this* person
+
+The caregiver indexes "Cues" once: fuzzy keywords the patient might say + a short
+note Gemma turns into a warm sentence. *"Where are my pills?" → "They're in the blue
+box on the kitchen counter, next to the kettle."*
+
+Cues are first-class in the prompt and override generic answers. Family members can
+also send a **"note from Sarah"** through the caregiver's Telegram bot — those become
+time-sensitive cues the patient can ask about in their own words.
+
+### Wellness — the caregiver loop
+
+While the iPad is on the table, [PresenceMonitor.swift](ios/Hearth/Hearth/Services/PresenceMonitor.swift)
+samples the front camera every few minutes and asks Gemma "is a person visible?". If
+the answer has been *no* for longer than a threshold, [CaregiverAlerter.swift](ios/Hearth/Hearth/Services/CaregiverAlerter.swift)
+pings the caregiver on Telegram. Telegram, not SMS or email, because it's free,
+reliable, cross-platform, and rings as a push notification.
+
+---
+
+## Architecture
+
+Everything inside the iPad is local. The only network traffic is **LAN-only Roku
+control** and **caregiver-initiated Telegram messages**. The Gemma model itself runs
+on-device via LiteRTLM — no model API is called at runtime.
+
+```mermaid
+flowchart TB
+    subgraph PATIENT["👵🏻 Patient — iPad on the table"]
+        direction TB
+        UI["SwiftUI screens<br/>Watch · People · Cues"]
+    end
+
+    subgraph DEVICE["📱 iPad — everything below is on-device"]
+        direction TB
+
+        subgraph SENSORS["Sensors"]
+            MIC["🎙 AudioRecorder<br/>16 kHz mono WAV"]
+            CAM["📷 CameraTap<br/>single still JPEG"]
+        end
+
+        subgraph BRAIN["🧠 Gemma 3n via LiteRTLM"]
+            GAUDIO["audio → text<br/>ASR"]
+            GTEXT["text → plan<br/>tool calls + narration"]
+            GVISION["vision → identity<br/>face re-rank, presence"]
+        end
+
+        subgraph LOCAL["On-device services"]
+            VISION["Apple Vision<br/>face feature-prints"]
+            TTS["AVSpeech TTS<br/>warm narration"]
+            PEOPLE["PeopleStore<br/>caregiver-indexed faces"]
+            CUES["CueStore<br/>standing knowledge<br/>+ family notes"]
+            PRES["PresenceMonitor<br/>periodic loop"]
+        end
+
+        subgraph TOOLS["Tool layer (RokuToolKit)"]
+            PARSER["plan parser<br/>line-based DSL"]
+            EXEC["executor<br/>safe + idempotent"]
+        end
+    end
+
+    subgraph WORLD["🏠 In the home"]
+        TV["📺 Roku TV<br/>ECP on port 8060<br/>LAN-only"]
+        CARE["📨 Caregiver<br/>Telegram bot"]
+    end
+
+    UI -->|tap-to-talk| MIC
+    MIC --> GAUDIO
+    GAUDIO --> GTEXT
+    UI -->|"camera scan"| CAM
+    CAM --> VISION
+    VISION -->|"shortlist top-3"| GVISION
+    GVISION -->|"verified match"| UI
+    CAM --> PRES
+    PRES --> GVISION
+
+    CUES --> GTEXT
+    PEOPLE --> VISION
+    GTEXT --> PARSER
+    PARSER --> EXEC
+    EXEC -->|"launch · pause · rewind"| TV
+    EXEC --> TTS
+    TTS -->|"speaks aloud"| UI
+    GTEXT -->|"narration only"| TTS
+
+    PRES -.->|"absence threshold"| CARE
+    CARE -.->|"family notes"| CUES
+
+    classDef onDevice fill:#FFF8E8,stroke:#9C4E2C,stroke-width:1px,color:#1a1a1a;
+    classDef external fill:#EAF1EA,stroke:#5A6B50,stroke-width:1px,color:#1a1a1a;
+    classDef brain fill:#FCE4C8,stroke:#9C4E2C,stroke-width:2px,color:#1a1a1a;
+    classDef patient fill:#FFFBF4,stroke:#B89A4F,stroke-width:1px,color:#1a1a1a;
+    class UI,MIC,CAM,VISION,TTS,PEOPLE,CUES,PRES,PARSER,EXEC onDevice;
+    class GAUDIO,GTEXT,GVISION brain;
+    class TV,CARE external;
+    class PATIENT,WORLD patient;
+```
+
+### How a typical "Put on Coronation Street" turn flows
+
+1. Patient taps the big mic button on the Watch tab.
+2. `AudioRecorder` captures 16 kHz mono PCM until release.
+3. Gemma's **audio path** runs in a transcribe-only session (no routing, no character)
+   → `"put on coronation street"`.
+4. The transcript is fed into Gemma's **text path** with the full catalog: show list +
+   Cues + family notes + current clock/weather + playback state.
+5. Gemma returns a tiny plan in a line-based DSL — `roku.launch("Coronation Street")`
+   plus a `say:` line for narration. (Line-based, not JSON, because small models follow
+   simple grammars more reliably and there's no markdown-fence noise to strip.)
+6. `RokuToolKit` parses and executes the plan against `RokuController`, which speaks
+   ECP HTTP to the TV over the LAN.
+7. `HearthTTS` reads the narration aloud while the TV starts the show.
+
+The same plumbing answers *"where is my daughter?"* — only the parser sees no tool
+calls and the narration comes from a matching cue ("*Sarah is at work today, she'll be
+here at six.*").
+
+### Why this split
+
+| Decision                                  | Reason                                                                                       |
+| ----------------------------------------- | -------------------------------------------------------------------------------------------- |
+| Gemma 3n via LiteRTLM, fully on-device    | Patient audio never leaves the iPad. Works with no internet. Zero per-call cost.             |
+| Vision shortlist → Gemma vision re-rank   | Vision is ~1 ms, Gemma vision is ~1–2 s. Use cheap math for narrowing, Gemma for deciding.   |
+| Two-step audio: ASR, *then* text routing  | The audio model is great at ASR alone but defaults to greetings when also asked to route.    |
+| Line-based DSL for tool calls             | Small models follow simple grammars more reliably than JSON.                                 |
+| Roku over ECP on the LAN                  | No account linking, no cloud TV API, no per-platform OAuth. Works the day you plug it in.    |
+| Telegram for caregiver loop               | Free, push-native, cross-platform, zero infra (~5 lines of HTTP).                            |
+
+---
+
+## Repository layout
+
+```
+ios/Hearth/                         iPad app — the canonical Hearth
+  Hearth/
+    HearthApp.swift                 app entry, wires up Observable services
+    RootView.swift                  top bar + screen switch + bottom nav
+    Screens/
+      TVScreen.swift                show-centric remote + voice control
+      PersonScreen.swift            camera viewfinder + recognised person
+      CuesScreen.swift              caregiver indexing of standing cues
+    Services/
+      HearthGemma.swift             Gemma 3n via LiteRTLM — text · audio · vision
+      RokuController.swift          ECP client (LAN HTTP on port 8060)
+      RokuToolKit.swift             tool catalog + plan parser + executor
+      FaceMatcher.swift             Vision feature-prints + Gemma re-rank
+      PresenceMonitor.swift         periodic camera + presence check loop
+      CaregiverAlerter.swift        Telegram bot send + inbox poll
+      HearthTTS.swift               AVSpeechSynthesizer wrapper
+      PeopleStore.swift             caregiver-indexed people + face prints
+      AudioRecorder.swift           16 kHz mono WAV recorder
+      CameraTap.swift               headless single-still camera
+    Components/                     SwiftUI primitives + setup sheets
+    Design/                         colour, type, theme palettes
+
+src/                                React + Vite UI prototype (design source)
+  App.jsx                           tablet shell, top bar, screen switch
+  components/primitives.jsx         Icon, Button, ContextStrip, ShowTile…
+  screens/
+    HomeScreen.jsx                  Now card + relationship-based calling
+    TVScreen.jsx                    show-centric remote prototype
+    PersonScreen.jsx                identity card + shared photos
+    RemindersScreen.jsx             day-at-a-glance reminders
+  styles/                           design system + tablet + stage CSS
+
+reference/hearth-tablet-prototype.html   the original artifact — design truth
+backend/roku_ecp_test.ipynb              Roku ECP exploration notebook
+```
+
+---
+
+## Run it
+
+### Web prototype (Vite)
 
 ```sh
 npm install
 npm run dev
 ```
 
-## Layout
+Open the URL Vite prints. The web build is the design exploration — useful to see the
+dementia-first UI patterns without an iPad or a Roku.
 
+### iPad app (Xcode)
+
+```sh
+open ios/Hearth/Hearth.xcodeproj
 ```
-src/
-  main.tsx                    entry — mounts <App/>, loads CSS + Phosphor icons
-  App.jsx                     tablet shell, top bar, screen switch, bottom nav
-  components/primitives.jsx   Icon, Button, Photo, ContextStrip, ShowTile, ...
-  screens/
-    HomeScreen.jsx            "Now" card + relationship-based calling
-    TVScreen.jsx              show-centric remote, intent rewind, never-lost shelf
-    PersonScreen.jsx          camera viewfinder + recognized person + memories
-    RemindersScreen.jsx       day-at-a-glance reminders
-  styles/
-    design-system.css         colors, type, fonts (@font-face → /fonts/)
-    tablet.css                tablet-specific component CSS
-    stage.css                 dark backdrop + tablet bezel
 
-public/fonts/                 Atkinson Hyperlegible + Newsreader (self-hosted woff2)
+Build to a physical iPad (Gemma 3n needs the Neural Engine). On first launch:
 
-reference/
-  hearth-tablet-prototype.html  original Claude artifact bundle — design source of truth
-```
+1. Wellness sheet → **Download Gemma** (one-time, runs LiteRTLM model download).
+2. Roku sheet → enter the TV's LAN IP (the Roku settings screen shows it). Hearth
+   probes ECP and flips to ready.
+3. Telegram sheet *(optional)* → paste the bot token and chat id from
+   [`CaregiverAlerter.swift`](ios/Hearth/Hearth/Services/CaregiverAlerter.swift)'s
+   header comment.
+
+After that, the iPad works offline. The model lives on disk; the only network the
+patient-facing path uses is LAN traffic to the Roku.
+
+---
+
+## Privacy
+
+- Audio: recorded → transcribed on-device → discarded. Never written to disk, never sent
+  off-device.
+- Camera: single stills only. The iOS green privacy indicator blinks every sample.
+  Frames are passed to Gemma vision in-memory and dropped.
+- People: caregiver-indexed portraits and their face prints live in app storage.
+- Telegram: the *only* outbound network path beyond the LAN, and it only sends
+  caregiver-facing strings (presence alerts, family notes the caregiver wrote).
+
+---
+
+## Credits & licensing
+
+- **Gemma 3n** — Google. Run on-device via **LiteRTLMSwift**.
+- **Apple Vision** — `VNFeaturePrintObservation` for face fingerprints.
+- **Phosphor Icons** — used in the web prototype.
+- **Atkinson Hyperlegible** + **Newsreader** — typefaces optimised for low-vision
+  readability.
+
+Built for [Gemma 4 Good](https://www.kaggle.com/competitions/gemma-4-good-hackathon) —
+a humanitarian application of small-model on-device AI.
